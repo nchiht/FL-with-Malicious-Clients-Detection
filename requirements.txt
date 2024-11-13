@@ -1,0 +1,2 @@
+androguard==3.3.5
+python-dotenv==1.0.1
