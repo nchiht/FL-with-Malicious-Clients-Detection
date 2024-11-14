@@ -1,4 +1,4 @@
-from modules.APK_to_image import *
+from modules.ApkImageConverter import *
 import matplotlib.pyplot as plt
 import os
 
