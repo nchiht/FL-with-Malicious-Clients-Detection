@@ -1,9 +1,11 @@
 # ./gitignore
 ./.gitmodules
 
-modules/apk2image/
+src/modules/apk2image/
 
 # data directory
-data/Malware/
+# data/Malware/
 .gitmodules
 .gitignore
+
+.env
