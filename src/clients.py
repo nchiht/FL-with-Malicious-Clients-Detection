@@ -11,7 +11,7 @@ import torch
 from datasets.utils.logging import disable_progress_bar
 from torch.utils.data import DataLoader
 
-disable_progress_bar()
+# disable_progress_bar()
 
 
 USE_FEDBN: bool = True
