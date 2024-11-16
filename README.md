@@ -1,4 +1,8 @@
 # FL-with-Malicious-Clients-Detection
+## Dependencies
+- Python 3.10
+
+## Instruction
 
 - Add APK converter
 
@@ -11,3 +15,5 @@
 - Install main requirements 
 
 `pip install -r requirements.txt`
+
+- Riskware: 541 fails

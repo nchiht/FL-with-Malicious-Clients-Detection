@@ -1,3 +1,4 @@
+# apk2image
 androguard==3.3.5
 python-dotenv==1.0.1
 opencv-python==4.10.0.84
@@ -9,3 +10,10 @@ json
 os
 tkinter
 threading
+
+# federated learning
+flwr[simulation]
+flwr-datasets[vision]
+torch
+torchvision
+matplotlib
