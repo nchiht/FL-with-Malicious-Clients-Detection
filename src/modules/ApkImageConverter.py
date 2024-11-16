@@ -319,7 +319,7 @@ def proceed_apk2image(input_path, output_path):
             a,d,dx = AnalyzeAPK(os.path.join(apks_path, sha))
             img = apk2image(a,d,dx)
             #Saving to local directory
-            cv2.imwrite(images_path + sha + '.jpg', img)
+            cv2.imwrite(images_path + sha.split('.')[0] + '.jpg', img)
             print("Success")
 
         except:
