@@ -4,7 +4,7 @@
 src/modules/apk2image/
 
 # data directory
-data/apk_image/
+data/apk_images/
 
 # data/Malware/
 .gitmodules
