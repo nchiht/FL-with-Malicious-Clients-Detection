@@ -7,6 +7,8 @@ src/modules/apk2image/
 data/apk_images/
 # data/Malware/
 
+__pycache__/
+
 .gitmodules
 .gitignore
 

@@ -17,4 +17,5 @@ flwr-datasets
 torch
 torchvision
 matplotlib
-
+ray
+dotenv
