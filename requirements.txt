@@ -19,3 +19,4 @@ torchvision
 matplotlib
 ray
 dotenv
+argparse

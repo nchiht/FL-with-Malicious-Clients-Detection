@@ -1,4 +1,3 @@
-from flwr.server import ServerConfig, ServerAppComponents
 from flwr.server.client_manager import ClientManager, SimpleClientManager
 from flwr.server.strategy import FedAvg, Strategy
 from flwr.server.history import History
@@ -14,7 +13,6 @@ from flwr.common import (
 )
 from flwr.common.logger import log
 
-from clients import Net
 from utils.evaluation import update_confusion_matrix
 from logging import DEBUG, INFO
 from typing import Optional, Union, List
@@ -22,42 +20,12 @@ import numpy as np
 import timeit
 
 
-def get_parameters(net) -> List[np.ndarray]:
-    return [val.cpu().numpy() for _, val in net.state_dict().items()]
-
-# Create FedAvg strategy
-strategy = FedAvg(
-    fraction_fit=1.0,  # Sample 100% of available clients for training
-    fraction_evaluate=0.5,  # Sample 50% of available clients for evaluation
-    min_fit_clients=10,  # Never sample less than 10 clients for training
-    min_evaluate_clients=5,  # Never sample less than 5 clients for evaluation
-    min_available_clients=10,  # Wait until all 10 clients are available
-    initial_parameters=ndarrays_to_parameters(get_parameters(Net()))
-)
-
-def server_fn(context: Context) -> ServerAppComponents:
-    """Construct components that set the ServerApp behaviour.
-
-    You can use the settings in `context.run_config` to parameterize the
-    construction of all elements (e.g the strategy or the number of rounds)
-    wrapped in the returned ServerAppComponents object.
-    """
-
-    # Configure the server for 5 rounds of training
-    config = ServerConfig(num_rounds=5)
-
-    return ServerAppComponents(
-        strategy=strategy, 
-        config=config, 
-        server=EnhancedServer(strategy=strategy)
-    )
-
 class EnhancedServer(Server):
     def __init__(
             self, 
             *, 
             client_manager: ClientManager = SimpleClientManager(), 
-            strategy: Strategy = FedAvg()
+            strategy: Strategy = FedAvg() # 
         ) -> None:
 
         super().__init__(
