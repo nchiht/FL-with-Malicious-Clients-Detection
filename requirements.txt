@@ -12,11 +12,11 @@ tkinter
 threading
 
 # federated learning
-flwr
-flwr-datasets
-torch
-torchvision
+flwr==1.13.0
+flwr-datasets==0.4.0
+torch==2.2.2
+torchvision==0.17.2
 matplotlib
-ray
-dotenv
-argparse
+ray==2.10.0
+dotenv==1.0.1
+argparse==1.4.0
