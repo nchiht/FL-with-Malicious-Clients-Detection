@@ -26,6 +26,61 @@ import random
 def main():
     pass
 
+
+def evaluate_fn(
+        server_round: int, 
+        parameters: NDArrays, 
+        config: Dict[str, Scalar]
+    ) -> Optional[Tuple[float, Dict[str, Scalar]]]:
+
+    model = model_with_dataset[dataset_id][0]
+    set_parameters(model, parameters)
+    model.to(device)
+
+    _,_, testset = model_with_dataset[dataset_id][1](partition_id=random.randint(1, 5), NUM_CLIENTS=NUM_CLIENTS, BATCH_SIZE=BATCH_SIZE)
+    # testloader = DataLoader(testset, batch_size=BATCH_SIZE)
+    loss, accuracy = test(model, testset, device=device)
+    log(INFO, f"Server-side evaluation loss {loss} / accuracy {accuracy}")
+    # return statistics
+    return loss, {"accuracy": accuracy}
+
+def server_fn(context: Context) -> ServerAppComponents:
+    """Construct components that set the ServerApp behaviour.
+
+    You can use the settings in `context.run_config` to parameterize the
+    construction of all elements (e.g the strategy or the number of rounds)
+    wrapped in the returned ServerAppComponents object.
+    """
+
+    # Configure the server for 5 rounds of training
+    config = ServerConfig(num_rounds=5)
+
+    return ServerAppComponents(
+        # strategy=strategy, 
+        config=config, 
+        server=EnhancedServer(strategy=strategy)
+    )
+
+
+def client_fn(context: Context) -> Client:
+    """Create a Flower client representing a single organization."""
+
+    # Load model
+    net = model_with_dataset[dataset_id][0].to(device)
+
+    # Load data (CIFAR-10)
+    # Note: each client gets a different trainloader/valloader, so each client
+    # will train and evaluate on their own unique data partition
+    # Read the node_config to fetch data partition associated to this node
+    partition_id = context.node_config["partition-id"]
+    trainloader, valloader, _ = model_with_dataset[dataset_id][1](partition_id=partition_id, NUM_CLIENTS=NUM_CLIENTS, BATCH_SIZE=BATCH_SIZE)
+
+    # Create a single Flower client representing a single organization
+    # FlowerClient is a subclass of NumPyClient, so we need to call .to_client()
+    # to convert it to a subclass of `flwr.client.Client`
+    return FlowerClient(net, trainloader, valloader, device=device, epochs=5).to_client()
+
+
 if __name__ == '__main__':
     # main()
     parser = argparse.ArgumentParser()
@@ -61,30 +116,6 @@ if __name__ == '__main__':
         # TODO: add mnist
     }
 
-    def evaluate_fn(
-            server_round: int, 
-            parameters: NDArrays, 
-            config: Dict[str, Scalar]
-        ) -> Optional[Tuple[float, Dict[str, Scalar]]]:
-        """Evaluate CIFAR-10 model on the test set."""
-        # if torch.cuda.is_available():
-        #     device = torch.device("cuda")
-        # elif torch.backends.mps.is_available():
-        #     device = torch.device("mps")
-        # else:
-        #     device = torch.device("cpu")
-
-        model = model_with_dataset[dataset_id][0]
-        set_parameters(model, parameters)
-        model.to(device)
-
-        _,_, testset = model_with_dataset[dataset_id][1](partition_id=random.randint(1, 5), NUM_CLIENTS=NUM_CLIENTS, BATCH_SIZE=BATCH_SIZE)
-        # testloader = DataLoader(testset, batch_size=BATCH_SIZE)
-        loss, accuracy = test(model, testset, device=device)
-        log(INFO, f"Server-side evaluation loss {loss} / accuracy {accuracy}")
-        # return statistics
-        return loss, {"accuracy": accuracy}
-
     strategy = FedAvg(
         fraction_fit=1.0,  # Sample 100% of available clients for training
         fraction_evaluate=0.5,  # Sample 50% of available clients for evaluation
@@ -94,42 +125,6 @@ if __name__ == '__main__':
         initial_parameters=ndarrays_to_parameters(get_parameters(model_with_dataset[dataset_id][0])),
         evaluate_fn=evaluate_fn
     )
-
-    def server_fn(context: Context) -> ServerAppComponents:
-        """Construct components that set the ServerApp behaviour.
-
-        You can use the settings in `context.run_config` to parameterize the
-        construction of all elements (e.g the strategy or the number of rounds)
-        wrapped in the returned ServerAppComponents object.
-        """
-
-        # Configure the server for 5 rounds of training
-        config = ServerConfig(num_rounds=5)
-
-        return ServerAppComponents(
-            # strategy=strategy, 
-            config=config, 
-            server=EnhancedServer(strategy=strategy)
-        )
-
-
-    def client_fn(context: Context) -> Client:
-        """Create a Flower client representing a single organization."""
-
-        # Load model
-        net = model_with_dataset[dataset_id][0].to(device)
-
-        # Load data (CIFAR-10)
-        # Note: each client gets a different trainloader/valloader, so each client
-        # will train and evaluate on their own unique data partition
-        # Read the node_config to fetch data partition associated to this node
-        partition_id = context.node_config["partition-id"]
-        trainloader, valloader, _ = model_with_dataset[dataset_id][1](partition_id=partition_id, NUM_CLIENTS=NUM_CLIENTS, BATCH_SIZE=BATCH_SIZE)
-
-        # Create a single Flower client representing a single organization
-        # FlowerClient is a subclass of NumPyClient, so we need to call .to_client()
-        # to convert it to a subclass of `flwr.client.Client`
-        return FlowerClient(net, trainloader, valloader, device=device, epochs=5).to_client()
 
     # Create the ClientApp
     client = ClientApp(client_fn=client_fn)
