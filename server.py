@@ -51,10 +51,10 @@ class EnhancedServer(Server):
                 res[0],
                 res[1],
             )
-            res[1]["TP"] = 0
-            res[1]["TN"] = 0
-            res[1]["FP"] = 0
-            res[1]["FN"] = 0
+            # res[1]["TP"] = 0
+            # res[1]["TN"] = 0
+            # res[1]["FP"] = 0
+            # res[1]["FN"] = 0
             history.add_loss_centralized(server_round=0, loss=res[0])
             history.add_metrics_centralized(server_round=0, metrics=res[1])
 
@@ -84,19 +84,23 @@ class EnhancedServer(Server):
                 loss_cen, metrics_cen = res_cen
                 # Update confusion matrix
 
-                self.confusion_matrix = update_confusion_matrix(
-                    self.confusion_matrix,
-                    self.clients_state,
-                    self.malicious_clients_idx,
-                    self.good_clients_idx,
-                )
-                metrics_cen["TP"] = self.confusion_matrix["TP"]
-                metrics_cen["TN"] = self.confusion_matrix["TN"]
-                metrics_cen["FP"] = self.confusion_matrix["FP"]
-                metrics_cen["FN"] = self.confusion_matrix["FN"]
+                # self.confusion_matrix = update_confusion_matrix(
+                #     self.confusion_matrix,
+                #     self.clients_state,
+                #     self.malicious_clients_idx,
+                #     self.good_clients_idx,
+                # )
+                # metrics_cen["TP"] = self.confusion_matrix["TP"]
+                # metrics_cen["TN"] = self.confusion_matrix["TN"]
+                # metrics_cen["FP"] = self.confusion_matrix["FP"]
+                # metrics_cen["FN"] = self.confusion_matrix["FN"]
                 log(
                     INFO,
-                    "fit progress: (%s, %s, %s, %s)",
+                    '''Fit progress: 
+                    \t- Current round: %s, 
+                    \t- Loss: %s, 
+                    \t- Metrics: %s, 
+                    \t- Time: %s''',
                     current_round,
                     loss_cen,
                     metrics_cen,

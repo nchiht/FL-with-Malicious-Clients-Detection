@@ -9,13 +9,19 @@ from typing import List, Tuple
 from datasets.utils.logging import disable_progress_bar
 
 from flwr.client import Client, NumPyClient
+from flwr.common import NDArrays, Scalar, Parameters
+from utils.models import cifar10, mnist
 
+"""
+Each model associated with clients would have 
+different train, test, load_datasets function
+"""
 
-DEVICE = torch.device("cpu")  # Try "cuda" to train on GPU
-NUM_CLIENTS = 10
-BATCH_SIZE = 32
+# DEVICE = torch.device("cpu")  # Try "cuda" to train on GPU
+# NUM_CLIENTS = 10
+# BATCH_SIZE = 32
     
-def train(net, trainloader, epochs: int, verbose=False):
+def train(net, trainloader, epochs: int, verbose=False, device="cpu"):
     """Train the network on the training set."""
     criterion = torch.nn.CrossEntropyLoss()
     optimizer = torch.optim.Adam(net.parameters())
@@ -25,9 +31,9 @@ def train(net, trainloader, epochs: int, verbose=False):
         for batch in trainloader:
 
             if(net._get_name() == "cifar10_Net"): # TODO: depends on models
-                images, labels = batch["img"].to(DEVICE), batch["label"].to(DEVICE)
+                images, labels = batch["img"].to(device), batch["label"].to(device)
             if(net._get_name() == "mnist_Net"):
-                images, labels = batch["image"].to(DEVICE), batch["label"].to(DEVICE)
+                images, labels = batch["image"].to(device), batch["label"].to(device)
 
             optimizer.zero_grad()
             outputs = net(images)
@@ -43,7 +49,7 @@ def train(net, trainloader, epochs: int, verbose=False):
         if verbose:
             print(f"Epoch {epoch+1}: train loss {epoch_loss}, accuracy {epoch_acc}")
 
-def test(net, testloader):
+def test(net, testloader, device="cpu"):
     """Evaluate the network on the entire test set."""
     criterion = torch.nn.CrossEntropyLoss()
     correct, total, loss = 0, 0, 0.0
@@ -52,9 +58,9 @@ def test(net, testloader):
         for batch in testloader:
 
             if(net._get_name() == "cifar10_Net"): # TODO: depends on models
-                images, labels = batch["img"].to(DEVICE), batch["label"].to(DEVICE)
+                images, labels = batch["img"].to(device), batch["label"].to(device)
             if(net._get_name() == "mnist_Net"):
-                images, labels = batch["image"].to(DEVICE), batch["label"].to(DEVICE)
+                images, labels = batch["image"].to(device), batch["label"].to(device)
 
             outputs = net(images)
             loss += criterion(outputs, labels).item()
@@ -70,46 +76,29 @@ def set_parameters(net, parameters: List[np.ndarray]):
     state_dict = OrderedDict({k: torch.Tensor(v) for k, v in params_dict})
     net.load_state_dict(state_dict, strict=True)
 
-
 def get_parameters(net) -> List[np.ndarray]:
     return [val.cpu().numpy() for _, val in net.state_dict().items()]
 
 class FlowerClient(NumPyClient):
-    def __init__(self, net, trainloader, valloader):
+    def __init__(self, net, trainloader, valloader, device='cpu', epochs=1):
         self.net = net
         self.trainloader = trainloader
         self.valloader = valloader
+        self.device = torch.device(device)
+        self.epochs = epochs
 
     def get_parameters(self, config):
         return get_parameters(self.net)
 
     def fit(self, parameters, config):
         set_parameters(self.net, parameters)
-        train(self.net, self.trainloader, epochs=1)
+        train(self.net, self.trainloader, epochs=self.epochs, device=self.device)
         return get_parameters(self.net), len(self.trainloader), {}
 
     def evaluate(self, parameters, config):
         set_parameters(self.net, parameters)
-        loss, accuracy = test(self.net, self.valloader)
+        loss, accuracy = test(self.net, self.valloader, device=self.device)
         return float(loss), len(self.valloader), {"accuracy": float(accuracy)}
-    
-# def client_fn(context: Context) -> Client:
-#     """Create a Flower client representing a single organization."""
-
-#     # Load model
-#     net = Net().to(DEVICE)
-
-#     # Load data (CIFAR-10)
-#     # Note: each client gets a different trainloader/valloader, so each client
-#     # will train and evaluate on their own unique data partition
-#     # Read the node_config to fetch data partition associated to this node
-#     partition_id = context.node_config["partition-id"]
-#     trainloader, valloader, _ = load_datasets_cifar10(partition_id=partition_id)
-
-#     # Create a single Flower client representing a single organization
-#     # FlowerClient is a subclass of NumPyClient, so we need to call .to_client()
-#     # to convert it to a subclass of `flwr.client.Client`
-#     return FlowerClient(net, trainloader, valloader).to_client()
 
 
 # def main():

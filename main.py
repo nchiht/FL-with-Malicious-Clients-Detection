@@ -5,34 +5,26 @@ from flwr.server.strategy import FedAvg
 from flwr.server import ServerConfig, ServerAppComponents
 from flwr.client import ClientApp, Client, NumPyClient
 from flwr.common.logger import log
-from flwr.common import Metrics, Context
+from flwr.common import Metrics, Context, NDArrays, Scalar
 from flwr.common import ndarrays_to_parameters, Context
 
 from server import EnhancedServer
 from clients import FlowerClient
-from clients import get_parameters
+from clients import get_parameters, set_parameters, test
+from utils import evaluation
 from utils.models import cifar10, mnist
 
 import torch
 import argparse
+from torch.utils.data import DataLoader
 from datasets.utils.logging import disable_progress_bar
 from logging import DEBUG, INFO
+from typing import Dict, Optional, Tuple
+import random
 
 
-DEVICE = torch.device("cpu")  # Try "cuda" to train on GPU
-print(f"Training on {DEVICE}")
-print(f"Flower {flwr.__version__} / PyTorch {torch.__version__}")
-disable_progress_bar()
-
-# Specify the resources each of your clients need
-# By default, each client will be allocated 1x CPU and 0x GPUs
-backend_config = {"client_resources": {"num_cpus": 1, "num_gpus": 0.0}}
-
-# When running on GPU, assign an entire GPU for each client
-if DEVICE.type == "cuda":
-    backend_config = {"client_resources": {"num_cpus": 1, "num_gpus": 1.0}}
-    # Refer to our Flower framework documentation for more details about Flower simulations
-    # and how to set up the `backend_config`
+def main():
+    pass
 
 if __name__ == '__main__':
     # main()
@@ -40,12 +32,28 @@ if __name__ == '__main__':
     parser.add_argument("-d", "--dataset", default="cifar10", type=str, help="Indicate dataset for the simulation")
     parser.add_argument("-n", "--num_clients", default=10, type=int, help="Indicate number of clients for the simulation")
     parser.add_argument("-b", "--batch_size", default=32, type=int, help="Indicate batch size for data partition")
+    parser.add_argument("--device", default="cpu", type=str, help="Select device type for the process")
     args = parser.parse_args()
     run_config = vars(args)
     
     dataset_id = run_config["dataset"]
     NUM_CLIENTS = run_config["num_clients"]
     BATCH_SIZE = run_config["batch_size"]
+    device = torch.device(run_config["device"])
+
+    # Specify the resources each of your clients need
+    # By default, each client will be allocated 1x CPU and 0x GPUs
+    backend_config = {"client_resources": {"num_cpus": 1, "num_gpus": 0.0}}
+
+    # When running on GPU, assign an entire GPU for each client
+    if device.type == "cuda":
+        backend_config = {"client_resources": {"num_cpus": 1, "num_gpus": 1.0}}
+        # Refer to our Flower framework documentation for more details about Flower simulations
+        # and how to set up the `backend_config`
+
+    print(f"Training on {device}")
+    print(f"Flower {flwr.__version__} / PyTorch {torch.__version__}")
+    disable_progress_bar()
 
     model_with_dataset = {
         "cifar10": [cifar10.cifar10_Net(), cifar10.load_datasets],
@@ -53,15 +61,39 @@ if __name__ == '__main__':
         # TODO: add mnist
     }
 
+    def evaluate_fn(
+            server_round: int, 
+            parameters: NDArrays, 
+            config: Dict[str, Scalar]
+        ) -> Optional[Tuple[float, Dict[str, Scalar]]]:
+        """Evaluate CIFAR-10 model on the test set."""
+        # if torch.cuda.is_available():
+        #     device = torch.device("cuda")
+        # elif torch.backends.mps.is_available():
+        #     device = torch.device("mps")
+        # else:
+        #     device = torch.device("cpu")
+
+        model = model_with_dataset[dataset_id][0]
+        set_parameters(model, parameters)
+        model.to(device)
+
+        _,_, testset = model_with_dataset[dataset_id][1](partition_id=random.randint(1, 5), NUM_CLIENTS=NUM_CLIENTS, BATCH_SIZE=BATCH_SIZE)
+        # testloader = DataLoader(testset, batch_size=BATCH_SIZE)
+        loss, accuracy = test(model, testset, device=device)
+        log(INFO, f"Server-side evaluation loss {loss} / accuracy {accuracy}")
+        # return statistics
+        return loss, {"accuracy": accuracy}
+
     strategy = FedAvg(
         fraction_fit=1.0,  # Sample 100% of available clients for training
         fraction_evaluate=0.5,  # Sample 50% of available clients for evaluation
         min_fit_clients=10,  # Never sample less than 10 clients for training
         min_evaluate_clients=5,  # Never sample less than 5 clients for evaluation
         min_available_clients=10,  # Wait until all 10 clients are available
-        initial_parameters=ndarrays_to_parameters(get_parameters(model_with_dataset[dataset_id][0]))
+        initial_parameters=ndarrays_to_parameters(get_parameters(model_with_dataset[dataset_id][0])),
+        evaluate_fn=evaluate_fn
     )
-
 
     def server_fn(context: Context) -> ServerAppComponents:
         """Construct components that set the ServerApp behaviour.
@@ -85,7 +117,7 @@ if __name__ == '__main__':
         """Create a Flower client representing a single organization."""
 
         # Load model
-        net = model_with_dataset[dataset_id][0].to(DEVICE)
+        net = model_with_dataset[dataset_id][0].to(device)
 
         # Load data (CIFAR-10)
         # Note: each client gets a different trainloader/valloader, so each client
@@ -97,7 +129,7 @@ if __name__ == '__main__':
         # Create a single Flower client representing a single organization
         # FlowerClient is a subclass of NumPyClient, so we need to call .to_client()
         # to convert it to a subclass of `flwr.client.Client`
-        return FlowerClient(net, trainloader, valloader).to_client()
+        return FlowerClient(net, trainloader, valloader, device=device, epochs=5).to_client()
 
     # Create the ClientApp
     client = ClientApp(client_fn=client_fn)
