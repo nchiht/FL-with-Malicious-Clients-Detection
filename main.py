@@ -1,4 +1,5 @@
 import flwr
+import os
 from flwr.simulation import run_simulation, start_simulation
 from flwr.server import ServerApp
 from flwr.server.strategy import FedAvg
@@ -13,6 +14,7 @@ from clients import FlowerClient
 from clients import get_parameters, set_parameters, test
 from utils import evaluation
 from utils.models import cifar10, mnist
+from attacks import no_attack, gaussian_attack 
 
 import torch
 import argparse
@@ -22,7 +24,7 @@ from logging import DEBUG, INFO
 from typing import Dict, Optional, Tuple
 import random
 
-
+os.environ["RAY_DEDUP_LOGS"] = "0"
 def main():
     pass
 
@@ -53,12 +55,12 @@ def server_fn(context: Context) -> ServerAppComponents:
     """
 
     # Configure the server for 5 rounds of training
-    config = ServerConfig(num_rounds=5)
+    config = ServerConfig(num_rounds=3)
 
     return ServerAppComponents(
         # strategy=strategy, 
         config=config, 
-        server=EnhancedServer(strategy=strategy)
+        server=EnhancedServer(strategy=strategy, attack_fn=gaussian_attack, magnitude=2)
     )
 
 
@@ -74,11 +76,11 @@ def client_fn(context: Context) -> Client:
     # Read the node_config to fetch data partition associated to this node
     partition_id = context.node_config["partition-id"]
     trainloader, valloader, _ = model_with_dataset[dataset_id][1](partition_id=partition_id, NUM_CLIENTS=NUM_CLIENTS, BATCH_SIZE=BATCH_SIZE)
-
+    node_id = context.node_id
     # Create a single Flower client representing a single organization
     # FlowerClient is a subclass of NumPyClient, so we need to call .to_client()
     # to convert it to a subclass of `flwr.client.Client`
-    return FlowerClient(net, trainloader, valloader, device=device, epochs=5).to_client()
+    return FlowerClient(node_id, net, trainloader, valloader, device=device, epochs=5).to_client()
 
 
 if __name__ == '__main__':

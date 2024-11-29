@@ -11,6 +11,8 @@ from datasets.utils.logging import disable_progress_bar
 from flwr.client import Client, NumPyClient
 from flwr.common import NDArrays, Scalar, Parameters
 from utils.models import cifar10, mnist
+from flwr.common.logger import log
+from logging import INFO
 
 """
 Each model associated with clients would have 
@@ -20,12 +22,12 @@ different train, test, load_datasets function
 # DEVICE = torch.device("cpu")  # Try "cuda" to train on GPU
 # NUM_CLIENTS = 10
 # BATCH_SIZE = 32
-    
 def train(net, trainloader, epochs: int, verbose=False, device="cpu"):
     """Train the network on the training set."""
     criterion = torch.nn.CrossEntropyLoss()
     optimizer = torch.optim.Adam(net.parameters())
     net.train()
+    local_grad = []
     for epoch in range(epochs):
         correct, total, epoch_loss = 0, 0, 0.0
         for batch in trainloader:
@@ -40,6 +42,15 @@ def train(net, trainloader, epochs: int, verbose=False, device="cpu"):
             loss = criterion(outputs, labels)
             loss.backward()
             optimizer.step()
+
+            #Local_Grad
+            if len(local_grad) == 0:
+                for p in net.parameters():
+                    local_grad.append(p.grad.clone())
+            else:
+                for idx, p in enumerate(net.parameters()):
+                    local_grad[idx] += p.grad
+
             # Metrics
             epoch_loss += loss
             total += labels.size(0)
@@ -48,6 +59,8 @@ def train(net, trainloader, epochs: int, verbose=False, device="cpu"):
         epoch_acc = correct / total
         if verbose:
             print(f"Epoch {epoch+1}: train loss {epoch_loss}, accuracy {epoch_acc}")
+    # log(INFO, "Local Grad: %s", local_grad)
+    return local_grad
 
 def test(net, testloader, device="cpu"):
     """Evaluate the network on the entire test set."""
@@ -80,7 +93,8 @@ def get_parameters(net) -> List[np.ndarray]:
     return [val.cpu().numpy() for _, val in net.state_dict().items()]
 
 class FlowerClient(NumPyClient):
-    def __init__(self, net, trainloader, valloader, device='cpu', epochs=1):
+    def __init__(self, node_id, net, trainloader, valloader, device='cpu', epochs=1):
+        self.node_id = node_id
         self.net = net
         self.trainloader = trainloader
         self.valloader = valloader
@@ -93,7 +107,7 @@ class FlowerClient(NumPyClient):
     def fit(self, parameters, config):
         set_parameters(self.net, parameters)
         train(self.net, self.trainloader, epochs=self.epochs, device=self.device)
-        return get_parameters(self.net), len(self.trainloader), {}
+        return get_parameters(self.net), len(self.trainloader), {"node_id": self.node_id}
 
     def evaluate(self, parameters, config):
         set_parameters(self.net, parameters)
