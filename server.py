@@ -29,7 +29,7 @@ class EnhancedServer(Server):
             sampling: int = 0, 
             history_dir: str = "clients_params",
             warmup_rounds: int = 1,
-            num_malicious: int = 2,
+            num_malicious: int = 3,
             attack_fn: Callable,
             magnitude: float = 0.0
         ) -> None:
@@ -47,6 +47,7 @@ class EnhancedServer(Server):
         self.num_malicious = num_malicious
         self.attack_fn = attack_fn
         self.magnitude = magnitude
+        self.clients_state = {}
 
     def fit(self, num_rounds, timeout):
         """Run federated averaging for a number of rounds."""
@@ -161,38 +162,39 @@ class EnhancedServer(Server):
             log(INFO, "fit_round %s: no clients selected, cancel", server_round)
             return None
         log(
-            DEBUG,
+            INFO,
             "fit_round %s: strategy sampled %s clients (out of %s)",
             server_round,
             len(client_instructions),
             self._client_manager.num_available(),
         )
-
+        
         # Randomly decide which client is malicious
-        size = self.num_malicious
-        if server_round <= self.warmup_rounds:
-            size = 0
-        log(INFO, "Selecting %s malicious clients", size)
-        self.malicious_lst = np.random.choice(
-            [proxy.cid for proxy, _ in client_instructions], size=size, replace=False
-        )
+        # Chỉ chọn malicious clients ở round đầu tiên
+        if server_round == (self.warmup_rounds + 1):
+            size = self.num_malicious
+            log(INFO, "Selecting %s malicious clients", size)
+            self.malicious_lst = np.random.choice(
+                range(self._client_manager.num_available()), size=size, replace=False
+            )
 
         # Create dict clients_state to keep track of malicious clients
-        clients_state = dict()
+        # clients_state = dict()
         for idx, (proxy, _) in enumerate(client_instructions):
-            clients_state[proxy.cid] = False
-            if proxy.cid in self.malicious_lst:
-                clients_state[proxy.cid] = True
+            self.clients_state[idx] = False
+            if idx in self.malicious_lst:
+                self.clients_state[idx] = True
         # Sort clients states
-        clients_state = {k: clients_state[k] for k in sorted(clients_state)}
+        self.clients_state = {k: self.clients_state[k] for k in sorted(self.clients_state)}
         log(
             DEBUG,
             "fit_round %s: malicious clients selected %s, clients_state %s",
             server_round,
             self.malicious_lst,
-            clients_state,
+            self.clients_state
         )
 
+        clients_state = self.clients_state
         # Collect `fit` results from all clients participating in this round
         results, failures = fit_clients(
             client_instructions=client_instructions,
@@ -207,6 +209,10 @@ class EnhancedServer(Server):
             len(results),
             len(failures),
         )
+        
+        #check
+        # list_id = [(proxy.cid, fitres.metrics["partition_id"]) for proxy, fitres in results]
+        # log(INFO, "List of clients' id and partition id: %s", list_id)
 
         # Save parameters of each client as time series
         ordered_results = [0 for _ in range(len(results))]
@@ -224,7 +230,7 @@ class EnhancedServer(Server):
 
                 params = params[self.params_indexes]
 
-            save_params(params, fitres.metrics["node_id"], params_dir=self.history_dir)
+            save_params(params, fitres.metrics["partition_id"], params_dir=self.history_dir)
 
             # Re-arrange results in the same order as clients' cids impose
             # ordered_results[int(fitres.metrics["node_id"])] = (proxy, fitres)
@@ -236,11 +242,12 @@ class EnhancedServer(Server):
         if self.aggregated_parameters == []:
             for key, val in clients_state.items():
                 if val is False:
-                    for idx, (proxy, fitres) in enumerate(ordered_results):
-                        if proxy.cid == key:
+                    # for idx, (proxy, fitres) in enumerate(ordered_results):
+                    #     if proxy.cid == key:
                             # log(INFO, "Aggregated parameters initialized: %s, %s", proxy.cid, fitres.metrics["node_id"])
                             self.aggregated_parameters = parameters_to_ndarrays(
-                                ordered_results[idx][1].parameters
+                                # ordered_results[idx][1].parameters
+                                ordered_results[int(key)][1].parameters
                             )
                             break
                     # self.aggregated_parameters = parameters_to_ndarrays(
@@ -250,6 +257,7 @@ class EnhancedServer(Server):
 
         # Apply attack function
         # the server simulates an attacker that controls a fraction of the clients
+        # Client state có key là partition_id, value là True nếu là malicious, False nếu là benign
         if self.attack_fn is not None and server_round > self.warmup_rounds:
             log(INFO, "Applying attack function")
             results, others = self.attack_fn(
@@ -259,7 +267,7 @@ class EnhancedServer(Server):
                 magnitude=self.magnitude,
                 # w_re=self.aggregated_parameters,
                 # threshold=self.threshold,
-                # d=len(self.aggregated_parameters),
+                d=len(self.aggregated_parameters),
                 # dataset_name=self.dataset_name,
                 # to_keep=self.to_keep,
                 malicious_num=self.num_malicious,
@@ -268,7 +276,7 @@ class EnhancedServer(Server):
 
             # Update saved parameters time series after the attack
             for proxy, fitres in results:
-                if clients_state[proxy.cid]:
+                if clients_state[fitres.metrics["partition_id"]]:
                     if self.sampling > 0:
                         params = flatten_params(
                             parameters_to_ndarrays(fitres.parameters)
@@ -280,12 +288,12 @@ class EnhancedServer(Server):
                     log(
                         INFO,
                         "Saving parameters of client %s with shape %s after the attack",
-                        fitres.metrics["node_id"],
+                        fitres.metrics["partition_id"],
                         params.shape,
                     )
                     save_params(
                         params,
-                        fitres.metrics["node_id"],
+                        fitres.metrics["partition_id"],
                         params_dir=self.history_dir,
                         remove_last=True,
                     )

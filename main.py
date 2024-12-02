@@ -15,6 +15,7 @@ from clients import get_parameters, set_parameters, test
 from utils import evaluation
 from utils.models import cifar10, mnist
 from attacks import no_attack, gaussian_attack 
+# from strategy import CustomFedAvg
 
 import torch
 import argparse
@@ -60,7 +61,7 @@ def server_fn(context: Context) -> ServerAppComponents:
     return ServerAppComponents(
         # strategy=strategy, 
         config=config, 
-        server=EnhancedServer(strategy=strategy, attack_fn=gaussian_attack, magnitude=2)
+        server=EnhancedServer(strategy=strategy, attack_fn=no_attack, magnitude=6)
     )
 
 
@@ -80,7 +81,8 @@ def client_fn(context: Context) -> Client:
     # Create a single Flower client representing a single organization
     # FlowerClient is a subclass of NumPyClient, so we need to call .to_client()
     # to convert it to a subclass of `flwr.client.Client`
-    return FlowerClient(node_id, net, trainloader, valloader, device=device, epochs=5).to_client()
+    return FlowerClient(partition_id, node_id, net, trainloader, valloader, device=device,
+                         epochs=5, datapoison_ratio=0).to_client()
 
 
 if __name__ == '__main__':
@@ -118,27 +120,27 @@ if __name__ == '__main__':
         # TODO: add mnist
     }
 
-    # strategy = FedAvg(
-    #     fraction_fit=1.0,  # Sample 100% of available clients for training
-    #     fraction_evaluate=0.5,  # Sample 50% of available clients for evaluation
-    #     min_fit_clients=10,  # Never sample less than 10 clients for training
-    #     min_evaluate_clients=5,  # Never sample less than 5 clients for evaluation
-    #     min_available_clients=10,  # Wait until all 10 clients are available
-    #     initial_parameters=ndarrays_to_parameters(get_parameters(model_with_dataset[dataset_id][0])),
-    #     evaluate_fn=evaluate_fn
-    # )
-
-    strategy = Krum(
-        fraction_fit = 0.8,
-        fraction_evaluate = 0.5,
-        min_fit_clients = 10,
-        min_evaluate_clients = 5,
-        min_available_clients = 10,
-        num_malicious_clients = 2,
-        num_clients_to_keep = 8,
-        evaluate_fn = evaluate_fn,
-        initial_parameters = ndarrays_to_parameters(get_parameters(model_with_dataset[dataset_id][0])),
+    strategy = FedAvg(
+        fraction_fit=1.0,  # Sample 100% of available clients for training
+        fraction_evaluate=0.5,  # Sample 50% of available clients for evaluation
+        min_fit_clients=10,  # Never sample less than 10 clients for training
+        min_evaluate_clients=5,  # Never sample less than 5 clients for evaluation
+        min_available_clients=10,  # Wait until all 10 clients are available
+        initial_parameters=ndarrays_to_parameters(get_parameters(model_with_dataset[dataset_id][0])),
+        evaluate_fn=evaluate_fn
     )
+
+    # strategy = Krum(
+    #     fraction_fit = 0.8,
+    #     fraction_evaluate = 0.5,
+    #     min_fit_clients = 10,
+    #     min_evaluate_clients = 5,
+    #     min_available_clients = 10,
+    #     num_malicious_clients = 2,
+    #     num_clients_to_keep = 8,
+    #     evaluate_fn = evaluate_fn,
+    #     initial_parameters = ndarrays_to_parameters(get_parameters(model_with_dataset[dataset_id][0])),
+    # )
 
     
 
