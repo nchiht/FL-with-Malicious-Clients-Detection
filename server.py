@@ -503,8 +503,8 @@ class EnhancedServer(Server):
             distance = fld_distance(self.old_update_list, local_update_list, None, None, hvp)
             distance = distance.view(1,-1)
             log(DEBUG, "distance: %s", distance)
-            log(DEBUG, "self.malicious_score: %s", self.malicious_score)
             self.malicious_score = torch.cat((self.malicious_score, distance), dim=0)
+            log(DEBUG, "self.malicious_score: %s", self.malicious_score)
             if self.malicious_score.shape[0] > self.warmup_rounds+1:
                 # if detection1(np.sum(self.malicious_score[-self.warmup_rounds:].numpy(), axis=0)):
                 #     label = detection(np.sum(self.malicious_score[-self.warmup_rounds:].numpy(), axis=0), 1)
