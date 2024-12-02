@@ -56,7 +56,7 @@ def server_fn(context: Context) -> ServerAppComponents:
     """
 
     # Configure the server for 5 rounds of training
-    config = ServerConfig(num_rounds=3)
+    config = ServerConfig(num_rounds=5)
 
     return ServerAppComponents(
         # strategy=strategy, 
@@ -158,6 +158,7 @@ if __name__ == '__main__':
         client_app=client,
         num_supernodes=NUM_CLIENTS,
         backend_config=backend_config,
+        verbose_logging=True
     )
     # history = start_simulation(
     #     client_fn=client_fn,

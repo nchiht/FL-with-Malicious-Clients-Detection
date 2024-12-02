@@ -9,16 +9,183 @@ from flwr.common import (
     Parameters, 
     Scalar, 
     parameters_to_ndarrays,
-    ndarrays_to_parameters
+    ndarrays_to_parameters,
+    bytes_to_ndarray
 )
 from flwr.common.logger import log
 from utils.util import flatten_params, save_params
 from utils.evaluation import update_confusion_matrix
 from logging import DEBUG, INFO
 from typing import Optional, Callable, Union, List
+from sklearn.cluster import KMeans
+import torch
 import numpy as np
 import timeit
 
+
+
+# def calculate_gradients(fitres, global_model):
+#     gradients = []
+#     for i in range(len(fitres.tensors)):
+#         fitres_tensor = torch.from_numpy(np.frombuffer(fitres.tensors[i], dtype=np.float32))
+#         global_model_tensor = torch.from_numpy(np.frombuffer(global_model.tensors[i], dtype=np.float32))
+
+#         # Pad the smaller tensor with zeros
+#         max_size = max(fitres_tensor.numel(), global_model_tensor.numel())
+#         fitres_tensor_padded = torch.cat((fitres_tensor, torch.zeros(max_size - fitres_tensor.numel())))
+#         global_model_tensor_padded = torch.cat((global_model_tensor, torch.zeros(max_size - global_model_tensor.numel())))
+        
+#         gradient = fitres_tensor_padded - global_model_tensor_padded
+#         gradients.append(gradient.numpy().tobytes())
+#     return Parameters(tensors=gradients, tensor_type=fitres.tensor_type)
+
+def detection(score, nobyz):
+    estimator = KMeans(n_clusters=2)
+    estimator.fit(score.reshape(-1, 1))
+    label_pred = estimator.labels_
+    
+    if np.mean(score[label_pred==0])<np.mean(score[label_pred==1]):
+        #0 is the label of malicious clients
+        label_pred = 1 - label_pred
+    real_label=np.ones(100)
+    real_label[:nobyz]=0
+    acc=len(label_pred[label_pred==real_label])/100
+    recall=1-np.sum(label_pred[:nobyz])/nobyz
+    fpr=1-np.sum(label_pred[nobyz:])/(100-nobyz)
+    fnr=np.sum(label_pred[:nobyz])/nobyz
+    # print("acc %0.4f; recall %0.4f; fpr %0.4f; fnr %0.4f;" % (acc, recall, fpr, fnr))
+    # print(silhouette_score(score.reshape(-1, 1), label_pred))
+    # print('defence.py line233 label_pred (0 = malicious pred)', label_pred)
+    return label_pred
+
+def detection1(score):
+    nrefs = 10
+    ks = range(1, 8)
+    gaps = np.zeros(len(ks))
+    gapDiff = np.zeros(len(ks) - 1)
+    sdk = np.zeros(len(ks))
+    min = np.min(score)
+    max = np.max(score)
+    score = (score - min)/(max-min)
+    for i, k in enumerate(ks):
+        estimator = KMeans(n_clusters=k)
+        estimator.fit(score.reshape(-1, 1))
+        label_pred = estimator.labels_
+        center = estimator.cluster_centers_
+        Wk = np.sum([np.square(score[m]-center[label_pred[m]]) for m in range(len(score))])
+        WkRef = np.zeros(nrefs)
+        for j in range(nrefs):
+            rand = np.random.uniform(0, 1, len(score))
+            estimator = KMeans(n_clusters=k)
+            estimator.fit(rand.reshape(-1, 1))
+            label_pred = estimator.labels_
+            center = estimator.cluster_centers_
+            WkRef[j] = np.sum([np.square(rand[m]-center[label_pred[m]]) for m in range(len(rand))])
+        gaps[i] = np.log(np.mean(WkRef)) - np.log(Wk)
+        sdk[i] = np.sqrt((1.0 + nrefs) / nrefs) * np.std(np.log(WkRef))
+
+        if i > 0:
+            gapDiff[i - 1] = gaps[i - 1] - gaps[i] + sdk[i]
+    # print('defense line278 gapDiff:', gapDiff)
+    select_k = 2  # default detect attacks
+    for i in range(len(gapDiff)):
+        if gapDiff[i] >= 0:
+            select_k = i+1
+            break
+    if select_k == 1:
+        print('No attack detected!')
+        return 0
+    else:
+        print('Attack Detected!')
+        return 1
+
+def fld_distance(old_update_list, local_update_list, net_glob, attack_number, hvp):
+    pred_update = []
+    distance = []
+    for i in range(len(old_update_list)):
+        pred_update.append((old_update_list[i] + hvp).view(-1))
+        
+    
+    pred_update = torch.stack(pred_update)
+    local_update_list = torch.stack(local_update_list)
+    old_update_list = torch.stack(old_update_list)
+    
+    distance = torch.norm((old_update_list - local_update_list), dim=1)
+    # print('defense line219 distance(old_update_list - local_update_list):',distance)
+    # auc1 = roc_auc_score(pred_update.numpy(), distance)
+    # distance = torch.norm((pred_update - local_update_list), dim=1).numpy()
+    # auc2 = roc_auc_score(pred_update.numpy(), distance)
+    # print("Detection AUC: %0.4f; Detection AUC: %0.4f" % (auc1, auc2))
+    
+    # print('defence line 211 pred_update.shape:', pred_update.shape)
+    distance = torch.norm((pred_update - local_update_list), dim=1)
+    # print('defence line 211 distance.shape:', distance.shape)
+    # distance = nn.functional.norm((pred_update - local_update_list), dim=0).numpy()
+    distance = distance / torch.sum(distance)
+    return distance
+
+def calculate_gradients(fitres_ndarrays, global_model_ndarrays, tensors_type="numpy.ndarray"):
+    gradients = []
+    for fitres_tensor, global_model_tensor in zip(fitres_ndarrays, global_model_ndarrays):
+        # Pad the smaller tensor with zeros
+        max_size = max(fitres_tensor.size, global_model_tensor.size)
+        fitres_tensor_padded = np.pad(fitres_tensor, (0, max_size - fitres_tensor.size))
+        global_model_tensor_padded = np.pad(global_model_tensor, (0, max_size - global_model_tensor.size))
+        
+        gradient = fitres_tensor_padded - global_model_tensor_padded
+        # gradients.append(gradient.tobytes())
+        gradients.append(gradient)
+    return Parameters(tensors=gradients, tensor_type=tensors_type)
+
+def parameters_dict_to_vector_flt(net_dict) -> torch.Tensor:
+    vec = []
+    for key, param in net_dict.items():
+        # print(key, torch.max(param))
+        if key.split('.')[-1] == 'num_batches_tracked' or key.split('.')[-1] == 'running_mean' or key.split('.')[-1] == 'running_var':
+            continue
+        vec.append(param.view(-1))
+    return torch.cat(vec)
+
+def lbfgs_torch(S_k_list, Y_k_list, v):
+    curr_S_k = torch.stack(S_k_list)
+    curr_S_k = curr_S_k.transpose(0, 1).cpu() #(10,xxxxxx)
+    # print('------------------------')
+    # print('curr_S_k.shape', curr_S_k.shape)
+    curr_Y_k = torch.stack(Y_k_list)
+    curr_Y_k = curr_Y_k.transpose(0, 1).cpu() #(10,xxxxxx)
+    S_k_time_Y_k = curr_S_k.transpose(0, 1) @ curr_Y_k
+    S_k_time_Y_k = S_k_time_Y_k.cpu()
+
+
+    S_k_time_S_k = curr_S_k.transpose(0, 1) @ curr_S_k
+    S_k_time_S_k = S_k_time_S_k.cpu()
+    # print('S_k_time_S_k.shape', S_k_time_S_k.shape)
+    R_k = np.triu(S_k_time_Y_k.numpy())
+    L_k = S_k_time_Y_k - torch.from_numpy(R_k).cpu()
+    sigma_k = Y_k_list[-1].view(-1,1).transpose(0, 1) @ S_k_list[-1].view(-1,1) / (S_k_list[-1].view(-1,1).transpose(0, 1) @ S_k_list[-1].view(-1,1))
+    sigma_k=sigma_k.cpu()
+    
+    D_k_diag = S_k_time_Y_k.diagonal()
+    upper_mat = torch.cat([sigma_k * S_k_time_S_k, L_k], dim=1)
+    lower_mat = torch.cat([L_k.transpose(0, 1), -D_k_diag.diag()], dim=1)
+    mat = torch.cat([upper_mat, lower_mat], dim=0)
+    mat_inv = mat.inverse()
+    # print('mat_inv.shape',mat_inv.shape)
+    v = v.view(-1,1).cpu()
+
+    approx_prod = sigma_k * v
+    # print('approx_prod.shape',approx_prod.shape)
+    # print('v.shape',v.shape)
+    # print('sigma_k.shape',sigma_k.shape)
+    # print('sigma_k',sigma_k)
+    p_mat = torch.cat([curr_S_k.transpose(0, 1) @ (sigma_k * v), curr_Y_k.transpose(0, 1) @ v], dim=0)
+    
+    approx_prod -= torch.cat([sigma_k * curr_S_k, curr_Y_k], dim=1) @ mat_inv @ p_mat
+    # print('approx_prod.shape',approx_prod.shape)
+    # print('approx_prod.shape',approx_prod.shape)
+    # print('approx_prod.shape.T',approx_prod.T.shape)
+
+    return approx_prod.T
 
 class EnhancedServer(Server):
     def __init__(
@@ -27,8 +194,8 @@ class EnhancedServer(Server):
             client_manager: ClientManager = SimpleClientManager(), 
             strategy: Strategy = FedAvg(), #
             sampling: int = 0, 
-            history_dir: str = "clients_params",
-            warmup_rounds: int = 1,
+            history_dir: str = "data/clients_params",
+            warmup_rounds: int = 2,
             num_malicious: int = 3,
             attack_fn: Callable,
             magnitude: float = 0.0
@@ -48,6 +215,20 @@ class EnhancedServer(Server):
         self.attack_fn = attack_fn
         self.magnitude = magnitude
         self.clients_state = {}
+
+        # initialize storing variables
+        self.old_update_list = []
+        self.weight_record = []
+        self.update_record = []
+        self.malicious_score = torch.zeros(self._client_manager.num_available())
+        self.last_weight = torch.tensor([])
+
+        # initialize storing variables
+        self.old_update_list = []
+        self.weight_record = []
+        self.update_record = []
+        self.malicious_score = torch.zeros(self._client_manager.num_available())
+        self.last_weight = torch.tensor([])
 
     def fit(self, num_rounds, timeout):
         """Run federated averaging for a number of rounds."""
@@ -274,6 +455,7 @@ class EnhancedServer(Server):
                 # num_layers=len(self.aggregated_parameters),
             )
 
+            gradient_updates = {} # Dictionary to store gradient updates
             # Update saved parameters time series after the attack
             for proxy, fitres in results:
                 if clients_state[fitres.metrics["partition_id"]]:
@@ -297,10 +479,91 @@ class EnhancedServer(Server):
                         params_dir=self.history_dir,
                         remove_last=True,
                     )
+
+                gradient = calculate_gradients(parameters_to_ndarrays(fitres.parameters), parameters_to_ndarrays(self.parameters), tensors_type=fitres.parameters.tensor_type) # Calculate the gradient of the client's parameters with respect to the global model parameters (fitres.parameters, self.parameters)
+                gradient_updates[proxy.cid] = torch.tensor(flatten_params(gradient.tensors)) # Add the weight update to the list
+            log(INFO, "Length of weight updates: %s", len(gradient_updates))
         else:
             results = ordered_results
             others = {}
+            gradient_updates = {}
     
+        current_global_weight = torch.tensor(flatten_params(parameters_to_ndarrays(self.parameters)))
+        local_update_list = [local for _, local in gradient_updates.items()]
+
+        # Detect malicious clients using FLDetector
+        if server_round > self.warmup_rounds + 1:
+            # self.sampling = 0
+            log(DEBUG, "Starting to detect malicious clients")
+
+            # Calculate the distance between the global model and the local model
+            hvp = lbfgs_torch(self.weight_record, self.update_record, current_global_weight - self.last_weight) 
+            log(DEBUG, "hvp: %s", hvp)
+            # distance = fld_distance(old_update_list, gradient_updates, None, None, hvp)
+            distance = fld_distance(self.old_update_list, local_update_list, None, None, hvp)
+            distance = distance.view(1,-1)
+            log(DEBUG, "distance: %s", distance)
+            log(DEBUG, "self.malicious_score: %s", self.malicious_score)
+            self.malicious_score = torch.cat((self.malicious_score, distance), dim=0)
+            if self.malicious_score.shape[0] > self.warmup_rounds+1:
+                # if detection1(np.sum(self.malicious_score[-self.warmup_rounds:].numpy(), axis=0)):
+                #     label = detection(np.sum(self.malicious_score[-self.warmup_rounds:].numpy(), axis=0), 1)
+                # else:
+                #     label = np.ones(100)
+                # selected_client = []
+                # for client in range(100):
+                #     if label[client] == 1:
+                #         selected_client.append(client)
+                # new_w_glob = FedAvg([w_locals[client] for client in selected_client])
+                log(DEBUG, "Detecting malicious clients")
+
+                # Aggregate training results
+                aggregated_result: tuple[
+                    Optional[Parameters],
+                    dict[str, Scalar],
+                ] = self.strategy.aggregate_fit(server_round, results, failures)
+            else:
+                # Aggregate training results
+                aggregated_result: tuple[
+                    Optional[Parameters],
+                    dict[str, Scalar],
+                ] = self.strategy.aggregate_fit(server_round, results, failures)
+        else:
+            hvp = None
+            # Aggregate training results
+            aggregated_result: tuple[
+                Optional[Parameters],
+                dict[str, Scalar],
+            ] = self.strategy.aggregate_fit(server_round, results, failures)
+            
+
+        parameters_aggregated, metrics_aggregated = aggregated_result
+        # new_global_weight = torch.tensor(flatten_params(parameters_to_ndarrays(parameters_aggregated)))
+        update = calculate_gradients(parameters_to_ndarrays(self.parameters), parameters_to_ndarrays(parameters_aggregated))  #w_t+1 = w_t - a*g_t => g_t = w_t - w_t+1 (a=1)
+        update = torch.tensor(flatten_params(update.tensors))
+
+        if server_round > 1:
+            # log(DEBUG, "Gap: %s", current_global_weight.cpu() - self.last_weight.cpu())
+            self.weight_record.append(current_global_weight.cpu() - self.last_weight.cpu())
+            self.update_record.append(update.cpu() -  self.last_update.cpu())
+        if server_round > self.warmup_rounds: 
+            del self.weight_record[0]
+            del self.update_record[0]
+
+        # log(DEBUG, "weight record: %s", self.weight_record)
+        # log(DEBUG, "update record: %s", self.update_record)
+        # log(DEBUG, "current global weight: %s", current_global_weight)
+        # log(DEBUG, "last weight: %s", self.last_weight)
+
+        self.last_update = update
+        self.old_update_list = local_update_list
+        self.last_weight = current_global_weight
+
+        # log(DEBUG, "last weight after: %s", self.last_weight)
+
+        return parameters_aggregated, metrics_aggregated, (results, failures)
+
+        
         # good_clients_idx = []
         # malicious_clients_idx = []
         # if isinstance(self.strategy, Flanders):

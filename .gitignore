@@ -6,7 +6,7 @@ src/modules/apk2image/
 # data directory
 data/apk_images/
 # data/Malware/
-modules/clients_params/
+data/clients_params/
 
 __pycache__/
 
