@@ -525,19 +525,20 @@ class EnhancedServer(Server):
 
             # Calculate the distance between the global model and the local model
             hvp = lbfgs_torch(self.weight_record, self.update_record, current_global_weight - self.last_weight) 
-            log(DEBUG, "hvp: %s", hvp)
+            # log(DEBUG, "hvp: %s", hvp)
             # distance = fld_distance(old_update_list, gradient_updates, None, None, hvp)
             distance = fld_distance(self.old_update_list, local_update_list, None, None, hvp)
+            log(DEBUG, "original distance: %s", distance)
             distance = distance.view(1,-1)
             log(DEBUG, "distance: %s", distance)
             self.malicious_score = torch.cat((self.malicious_score, distance), dim=0)
-            log(DEBUG, "self.malicious_score: %s", self.malicious_score)
+            # log(DEBUG, "self.malicious_score: %s", self.malicious_score)
             if self.malicious_score.shape[0] > self.warmup_rounds+1:
                 # if detection1(np.sum(self.malicious_score[-self.warmup_rounds:].numpy(), axis=0)):
                 #     label = detection(np.sum(self.malicious_score[-self.warmup_rounds:].numpy(), axis=0), 1)
                 # else:
                 #     label = np.ones(100)
-                # selected_client = []
+                selected_client = []
                 # for client in range(100):
                 #     if label[client] == 1:
                 #         selected_client.append(client)
@@ -573,12 +574,12 @@ class EnhancedServer(Server):
             # log(DEBUG, "Gap: %s", current_global_weight.cpu() - self.last_weight.cpu())
             self.weight_record.append(current_global_weight.cpu() - self.last_weight.cpu())
             self.update_record.append(update.cpu() -  self.last_update.cpu())
-        if server_round > self.warmup_rounds: 
+        if server_round > self.warmup_rounds + 1: 
             del self.weight_record[0]
             del self.update_record[0]
 
-        # log(DEBUG, "weight record: %s", self.weight_record)
-        # log(DEBUG, "update record: %s", self.update_record)
+        log(DEBUG, "weight record: %s", len(self.weight_record))
+        log(DEBUG, "update record: %s", len(self.update_record))
         # log(DEBUG, "current global weight: %s", current_global_weight)
         # log(DEBUG, "last weight: %s", self.last_weight)
 
