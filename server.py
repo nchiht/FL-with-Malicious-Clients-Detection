@@ -125,6 +125,27 @@ def fld_distance(old_update_list, local_update_list, net_glob, attack_number, hv
     return distance
 
 def calculate_gradients(fitres_ndarrays, global_model_ndarrays, tensors_type="numpy.ndarray"):
+    """
+    Calculate the gradients between local fit results and a global model.
+
+    This function computes the difference between each tensor in the local fit 
+    results and the corresponding tensor in the global model. The tensors are 
+    padded with zeros to match sizes before computing the difference.
+
+    Parameters
+    ----------
+    fitres_ndarrays : list of np.ndarray
+        A list of numpy arrays representing the local fit results.
+    global_model_ndarrays : list of np.ndarray
+        A list of numpy arrays representing the global model's parameters.
+    tensors_type : str, optional
+        The type of the tensors to be returned (default is "numpy.ndarray").
+
+    Returns
+    -------
+    Parameters
+        A Parameters object containing the calculated gradients as tensors.
+    """
     gradients = []
     for fitres_tensor, global_model_tensor in zip(fitres_ndarrays, global_model_ndarrays):
         # Pad the smaller tensor with zeros
@@ -230,12 +251,12 @@ class EnhancedServer(Server):
         self.malicious_score = torch.zeros(self._client_manager.num_available())
         self.last_weight = torch.tensor([])
 
-        # # initialize storing variables
-        # self.old_update_list = []
-        # self.weight_record = []
-        # self.update_record = []
-        # self.malicious_score = torch.zeros(self._client_manager.num_available())
-        # self.last_weight = torch.tensor([])
+        # # # initialize storing variables
+        # # self.old_update_list = []
+        # # self.weight_record = []
+        # # self.update_record = []
+        # # self.malicious_score = torch.zeros(self._client_manager.num_available())
+        # # self.last_weight = torch.tensor([])
 
     def fit(self, num_rounds, timeout):
         """Run federated averaging for a number of rounds."""
@@ -462,7 +483,6 @@ class EnhancedServer(Server):
                 # num_layers=len(self.aggregated_parameters),
             )
 
-            gradient_updates = {} # Dictionary to store gradient updates
             # Update saved parameters time series after the attack
             for proxy, fitres in results:
                 if clients_state[fitres.metrics["partition_id"]]:
@@ -486,16 +506,22 @@ class EnhancedServer(Server):
                         params_dir=self.history_dir,
                         remove_last=True,
                     )
-                #gradient local
-                #g_i_t = w_i_t+1 - w_i_t (alpha=1)
-                gradient = calculate_gradients(parameters_to_ndarrays(fitres.parameters), parameters_to_ndarrays(self.parameters), tensors_type=fitres.parameters.tensor_type) # Calculate the gradient of the client's parameters with respect to the global model parameters (fitres.parameters, self.parameters)
-                gradient_updates[proxy.cid] = torch.tensor(flatten_params(gradient.tensors)) # Add the weight update to the list
-            log(INFO, "Length of weight updates: %s", len(gradient_updates))
         else:
             results = ordered_results
             others = {}
-            gradient_updates = {}
     
+        # Get gradients
+        gradient_updates = {}
+        for idx, (proxy, fitres) in enumerate(results):
+            gradient = calculate_gradients(
+                parameters_to_ndarrays(fitres.parameters), 
+                parameters_to_ndarrays(self.parameters), 
+                tensors_type=fitres.parameters.tensor_type
+            ) # Calculate the gradient of the client's parameters with respect to the global model parameters (fitres.parameters, self.parameters)
+            gradient_updates[fitres.metrics["partition_id"]] = -1*torch.tensor(flatten_params(gradient.tensors)).cpu() 
+            # Add the weight update to the list, multiplied by -1 to make it a gradient
+        log(DEBUG, "Weight updates: %s", gradient_updates)
+
         current_global_weight = torch.tensor(flatten_params(parameters_to_ndarrays(self.parameters)))
         local_update_list = [local for _, local in gradient_updates.items()]
          
@@ -510,6 +536,7 @@ class EnhancedServer(Server):
             log(DEBUG, "local update list i: %s", local_update_list[0].shape)
             # distance = fld_distance(old_update_list, gradient_updates, None, None, hvp)
             distance = fld_distance(self.old_update_list, local_update_list, None, None, hvp)
+            log(DEBUG, "original distance: %s", distance)
             distance = distance.view(1,-1)
             log(DEBUG, "distance: %s, %s", distance, distance.shape)
             self.malicious_score = torch.cat((self.malicious_score, distance), dim=0)
@@ -519,7 +546,7 @@ class EnhancedServer(Server):
                 #     label = detection(np.sum(self.malicious_score[-self.warmup_rounds:].numpy(), axis=0), 1)
                 # else:
                 #     label = np.ones(100)
-                # selected_client = []
+                selected_client = []
                 # for client in range(100):
                 #     if label[client] == 1:
                 #         selected_client.append(client)
@@ -562,8 +589,8 @@ class EnhancedServer(Server):
             del self.weight_record[0]
             del self.update_record[0]
 
-        # log(DEBUG, "weight record: %s", self.weight_record)
-        # log(DEBUG, "update record: %s", self.update_record)
+        log(DEBUG, "weight record: %s", len(self.weight_record))
+        log(DEBUG, "update record: %s", len(self.update_record))
         # log(DEBUG, "current global weight: %s", current_global_weight)
         # log(DEBUG, "last weight: %s", self.last_weight)
 
