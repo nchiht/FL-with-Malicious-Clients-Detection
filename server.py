@@ -109,8 +109,8 @@ def fld_distance(old_update_list, local_update_list, net_glob, attack_number, hv
     pred_update = torch.stack(pred_update)
     local_update_list = torch.stack(local_update_list)
     old_update_list = torch.stack(old_update_list)
-    
-    distance = torch.norm((old_update_list - local_update_list), dim=1)
+    #########################
+    # distance = torch.norm((old_update_list - local_update_list), dim=1)
     # print('defense line219 distance(old_update_list - local_update_list):',distance)
     # auc1 = roc_auc_score(pred_update.numpy(), distance)
     # distance = torch.norm((pred_update - local_update_list), dim=1).numpy()
@@ -128,11 +128,12 @@ def calculate_gradients(fitres_ndarrays, global_model_ndarrays, tensors_type="nu
     gradients = []
     for fitres_tensor, global_model_tensor in zip(fitres_ndarrays, global_model_ndarrays):
         # Pad the smaller tensor with zeros
-        max_size = max(fitres_tensor.size, global_model_tensor.size)
-        fitres_tensor_padded = np.pad(fitres_tensor, (0, max_size - fitres_tensor.size))
-        global_model_tensor_padded = np.pad(global_model_tensor, (0, max_size - global_model_tensor.size))
+        # max_size = max(fitres_tensor.size, global_model_tensor.size)
+        # fitres_tensor_padded = np.pad(fitres_tensor, (0, max_size - fitres_tensor.size))
+        # global_model_tensor_padded = np.pad(global_model_tensor, (0, max_size - global_model_tensor.size))
         
-        gradient = fitres_tensor_padded - global_model_tensor_padded
+        # gradient = fitres_tensor_padded - global_model_tensor_padded
+        gradient = fitres_tensor - global_model_tensor
         # gradients.append(gradient.tobytes())
         gradients.append(gradient)
     return Parameters(tensors=gradients, tensor_type=tensors_type)
@@ -148,21 +149,27 @@ def parameters_dict_to_vector_flt(net_dict) -> torch.Tensor:
 
 def lbfgs_torch(S_k_list, Y_k_list, v):
     curr_S_k = torch.stack(S_k_list)
-    curr_S_k = curr_S_k.transpose(0, 1).cpu() #(10,xxxxxx)
+    curr_S_k = curr_S_k.transpose(0, 1).cpu() #(10,xxxxxx) 
     # print('------------------------')
     # print('curr_S_k.shape', curr_S_k.shape)
     curr_Y_k = torch.stack(Y_k_list)
-    curr_Y_k = curr_Y_k.transpose(0, 1).cpu() #(10,xxxxxx)
-    S_k_time_Y_k = curr_S_k.transpose(0, 1) @ curr_Y_k
+    curr_Y_k = curr_Y_k.transpose(0, 1).cpu() #(10,xxxxxx) 
+    curr_S_k = curr_S_k.double()
+    curr_Y_k = curr_Y_k.double()
+    S_k_time_Y_k = curr_S_k.transpose(0, 1) @ curr_Y_k 
     S_k_time_Y_k = S_k_time_Y_k.cpu()
 
-
-    S_k_time_S_k = curr_S_k.transpose(0, 1) @ curr_S_k
+    S_k_time_S_k = curr_S_k.transpose(0, 1) @ curr_S_k 
     S_k_time_S_k = S_k_time_S_k.cpu()
     # print('S_k_time_S_k.shape', S_k_time_S_k.shape)
     R_k = np.triu(S_k_time_Y_k.numpy())
     L_k = S_k_time_Y_k - torch.from_numpy(R_k).cpu()
-    sigma_k = Y_k_list[-1].view(-1,1).transpose(0, 1) @ S_k_list[-1].view(-1,1) / (S_k_list[-1].view(-1,1).transpose(0, 1) @ S_k_list[-1].view(-1,1))
+    # sigma_k = Y_k_list[-1].view(-1,1).transpose(0, 1) @ S_k_list[-1].view(-1,1) / (S_k_list[-1].view(-1,1).transpose(0, 1) @ S_k_list[-1].view(-1,1))
+
+    Y_k = Y_k_list[-1].view(-1, 1).double()
+    S_k = S_k_list[-1].view(-1, 1).double()
+    # Thực hiện phép nhân ma trận
+    sigma_k = Y_k.transpose(0, 1) @ S_k / (S_k.transpose(0, 1) @ S_k)
     sigma_k=sigma_k.cpu()
     
     D_k_diag = S_k_time_Y_k.diagonal()
@@ -171,7 +178,7 @@ def lbfgs_torch(S_k_list, Y_k_list, v):
     mat = torch.cat([upper_mat, lower_mat], dim=0)
     mat_inv = mat.inverse()
     # print('mat_inv.shape',mat_inv.shape)
-    v = v.view(-1,1).cpu()
+    v = v.view(-1,1).cpu().double()
 
     approx_prod = sigma_k * v
     # print('approx_prod.shape',approx_prod.shape)
@@ -184,7 +191,7 @@ def lbfgs_torch(S_k_list, Y_k_list, v):
     # print('approx_prod.shape',approx_prod.shape)
     # print('approx_prod.shape',approx_prod.shape)
     # print('approx_prod.shape.T',approx_prod.T.shape)
-
+    print('approx_prod',approx_prod.T, approx_prod.T.shape)    
     return approx_prod.T
 
 class EnhancedServer(Server):
@@ -223,12 +230,12 @@ class EnhancedServer(Server):
         self.malicious_score = torch.zeros(self._client_manager.num_available())
         self.last_weight = torch.tensor([])
 
-        # initialize storing variables
-        self.old_update_list = []
-        self.weight_record = []
-        self.update_record = []
-        self.malicious_score = torch.zeros(self._client_manager.num_available())
-        self.last_weight = torch.tensor([])
+        # # initialize storing variables
+        # self.old_update_list = []
+        # self.weight_record = []
+        # self.update_record = []
+        # self.malicious_score = torch.zeros(self._client_manager.num_available())
+        # self.last_weight = torch.tensor([])
 
     def fit(self, num_rounds, timeout):
         """Run federated averaging for a number of rounds."""
@@ -479,7 +486,8 @@ class EnhancedServer(Server):
                         params_dir=self.history_dir,
                         remove_last=True,
                     )
-
+                #gradient local
+                #g_i_t = w_i_t+1 - w_i_t (alpha=1)
                 gradient = calculate_gradients(parameters_to_ndarrays(fitres.parameters), parameters_to_ndarrays(self.parameters), tensors_type=fitres.parameters.tensor_type) # Calculate the gradient of the client's parameters with respect to the global model parameters (fitres.parameters, self.parameters)
                 gradient_updates[proxy.cid] = torch.tensor(flatten_params(gradient.tensors)) # Add the weight update to the list
             log(INFO, "Length of weight updates: %s", len(gradient_updates))
@@ -490,7 +498,7 @@ class EnhancedServer(Server):
     
         current_global_weight = torch.tensor(flatten_params(parameters_to_ndarrays(self.parameters)))
         local_update_list = [local for _, local in gradient_updates.items()]
-
+         
         # Detect malicious clients using FLDetector
         if server_round > self.warmup_rounds + 1:
             # self.sampling = 0
@@ -499,12 +507,13 @@ class EnhancedServer(Server):
             # Calculate the distance between the global model and the local model
             hvp = lbfgs_torch(self.weight_record, self.update_record, current_global_weight - self.last_weight) 
             log(DEBUG, "hvp: %s", hvp)
+            log(DEBUG, "local update list i: %s", local_update_list[0].shape)
             # distance = fld_distance(old_update_list, gradient_updates, None, None, hvp)
             distance = fld_distance(self.old_update_list, local_update_list, None, None, hvp)
             distance = distance.view(1,-1)
-            log(DEBUG, "distance: %s", distance)
+            log(DEBUG, "distance: %s, %s", distance, distance.shape)
             self.malicious_score = torch.cat((self.malicious_score, distance), dim=0)
-            log(DEBUG, "self.malicious_score: %s", self.malicious_score)
+            log(DEBUG, "self.malicious_score: %s, %s", self.malicious_score, self.malicious_score.shape)    
             if self.malicious_score.shape[0] > self.warmup_rounds+1:
                 # if detection1(np.sum(self.malicious_score[-self.warmup_rounds:].numpy(), axis=0)):
                 #     label = detection(np.sum(self.malicious_score[-self.warmup_rounds:].numpy(), axis=0), 1)
@@ -539,14 +548,17 @@ class EnhancedServer(Server):
 
         parameters_aggregated, metrics_aggregated = aggregated_result
         # new_global_weight = torch.tensor(flatten_params(parameters_to_ndarrays(parameters_aggregated)))
+        #gradient global
         update = calculate_gradients(parameters_to_ndarrays(self.parameters), parameters_to_ndarrays(parameters_aggregated))  #w_t+1 = w_t - a*g_t => g_t = w_t - w_t+1 (a=1)
         update = torch.tensor(flatten_params(update.tensors))
 
         if server_round > 1:
             # log(DEBUG, "Gap: %s", current_global_weight.cpu() - self.last_weight.cpu())
+            #deltaW
             self.weight_record.append(current_global_weight.cpu() - self.last_weight.cpu())
+            #deltaG
             self.update_record.append(update.cpu() -  self.last_update.cpu())
-        if server_round > self.warmup_rounds: 
+        if server_round > self.warmup_rounds + 1: 
             del self.weight_record[0]
             del self.update_record[0]
 
