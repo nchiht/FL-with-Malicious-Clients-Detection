@@ -1,3 +1,5 @@
+import os   
+os.environ['RAY_DEDUP_LOGS'] = '0'
 import torch
 import numpy as np
 import torch.nn as nn
@@ -15,7 +17,7 @@ from flwr.client import Client, NumPyClient
 from flwr.common import NDArrays, Scalar, Parameters
 from utils.models import cifar10, mnist
 from flwr.common.logger import log
-from logging import INFO
+from logging import INFO, DEBUG
 
 """
 Each model associated with clients would have 
@@ -25,7 +27,6 @@ different train, test, load_datasets function
 # DEVICE = torch.device("cpu")  # Try "cuda" to train on GPU
 # NUM_CLIENTS = 10
 BATCH_SIZE = 32
-rnd=[]
 
 def train(net, trainloader, epochs: int, verbose=False, device="cpu"):
     """Train the network on the training set."""
@@ -113,7 +114,7 @@ def poison_data(train_loader, poison_ratio=0):
 
         for i in range(len(labels)):
             if torch.rand(1).item() < poison_ratio:
-                labels[i] = 2 #(labels[i] + 1) % 10
+                labels[i] = 0 #(labels[i] + 1) % 10
 
         # Chuyển từng phần tử của inputs thành torch.Tensor nếu chưa phải
         inputs = [torch.tensor(img) if not isinstance(img, torch.Tensor) else img for img in inputs]
@@ -153,11 +154,12 @@ class FlowerClient(NumPyClient):
 
     def fit(self, parameters, config):
         set_parameters(self.net, parameters)
-        if (self.datapoison_ratio > 0) and (self.partition_id in [0,1,2,3,4]): #(rnd != []) and 
+        if (self.datapoison_ratio > 0) and (self.partition_id in [0,1,2,3,4]): #TODO: thêm client_states và server_round từ server
             poisoned_data = poison_data(self.trainloader, poison_ratio=self.datapoison_ratio)
             # Tạo lại DataLoader với dữ liệu đã bị nhiễm độc
             trainloader = DataLoader(poisoned_data, batch_size=BATCH_SIZE, collate_fn=collate_fn)#shuffle=True, 
-            print(f"Client {self.partition_id} has poisoned data")
+            log(INFO, "Client %s: Poisoned data", self.partition_id)
+              
         else:
             trainloader = self.trainloader
         rnd = [1] #simulate server warmup round (chưa dùng tới)

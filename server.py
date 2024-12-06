@@ -1,3 +1,5 @@
+import os   
+os.environ['RAY_DEDUP_LOGS'] = '0'
 from flwr.server.client_manager import ClientManager, SimpleClientManager
 from flwr.server.strategy import FedAvg, Strategy
 from flwr.server.history import History
@@ -424,6 +426,21 @@ class EnhancedServer(Server):
                 dict[str, Scalar],
             ] = self.strategy.aggregate_fit(server_round, results, failures)
             
+        # if server_round > 1:
+        #     results = results[0:7]
+        #     # Aggregate training results
+        #     aggregated_result: tuple[
+        #         Optional[Parameters],
+        #         dict[str, Scalar],
+        #     ] = self.strategy.aggregate_fit(server_round, results, failures)
+        # else:
+        #     # Aggregate training results
+        #     aggregated_result: tuple[
+        #         Optional[Parameters],
+        #         dict[str, Scalar],
+        #     ] = self.strategy.aggregate_fit(server_round, results, failures)
+
+        log(DEBUG, "results: %s", len(results))
 
         parameters_aggregated, metrics_aggregated = aggregated_result
         # new_global_weight = torch.tensor(flatten_params(parameters_to_ndarrays(parameters_aggregated)))

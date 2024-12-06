@@ -1,5 +1,6 @@
+import os   
+os.environ['RAY_DEDUP_LOGS'] = '0'
 import flwr
-import os
 from flwr.simulation import run_simulation, start_simulation
 from flwr.server import ServerApp
 from flwr.server.strategy import FedAvg, Krum
@@ -25,7 +26,7 @@ from logging import DEBUG, INFO
 from typing import Dict, Optional, Tuple
 import random
 
-os.environ["RAY_DEDUP_LOGS"] = "0"
+
 def main():
     pass
 
@@ -61,7 +62,7 @@ def server_fn(context: Context) -> ServerAppComponents:
     return ServerAppComponents(
         # strategy=strategy, 
         config=config, 
-        server=EnhancedServer(strategy=strategy, attack_fn=gaussian_attack, magnitude=6)
+        server=EnhancedServer(strategy=strategy, attack_fn=no_attack, magnitude=6)
     )
 
 
@@ -82,7 +83,7 @@ def client_fn(context: Context) -> Client:
     # FlowerClient is a subclass of NumPyClient, so we need to call .to_client()
     # to convert it to a subclass of `flwr.client.Client`
     return FlowerClient(partition_id, node_id, net, trainloader, valloader, device=device,
-                         epochs=5, datapoison_ratio=0).to_client()
+                         epochs=5, datapoison_ratio=0.0).to_client()
 
 
 if __name__ == '__main__':
