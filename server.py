@@ -49,10 +49,11 @@ def detection(score, nobyz):
         label_pred = 1 - label_pred
     real_label=np.ones(100)
     real_label[:nobyz]=0
-    acc=len(label_pred[label_pred==real_label])/100
-    recall=1-np.sum(label_pred[:nobyz])/nobyz
-    fpr=1-np.sum(label_pred[nobyz:])/(100-nobyz)
-    fnr=np.sum(label_pred[:nobyz])/nobyz
+    # acc=len(label_pred[label_pred==real_label])/100
+    # recall=1-np.sum(label_pred[:nobyz])/nobyz
+    # fpr=1-np.sum(label_pred[nobyz:])/(100-nobyz)
+    # fnr=np.sum(label_pred[:nobyz])/nobyz
+    
     # print("acc %0.4f; recall %0.4f; fpr %0.4f; fnr %0.4f;" % (acc, recall, fpr, fnr))
     # print(silhouette_score(score.reshape(-1, 1), label_pred))
     # print('defence.py line233 label_pred (0 = malicious pred)', label_pred)
@@ -92,6 +93,7 @@ def detection1(score):
         if gapDiff[i] >= 0:
             select_k = i+1
             break
+    log(DEBUG, "select_k: %s", select_k)
     if select_k == 1:
         print('No attack detected!')
         return 0
@@ -223,8 +225,9 @@ class EnhancedServer(Server):
             strategy: Strategy = FedAvg(), #
             sampling: int = 0, 
             history_dir: str = "data/clients_params",
-            warmup_rounds: int = 2,
+            warmup_rounds: int = 1,
             num_malicious: int = 3,
+            window_size: int = 3,
             attack_fn: Callable,
             magnitude: float = 0.0
         ) -> None:
@@ -243,6 +246,7 @@ class EnhancedServer(Server):
         self.attack_fn = attack_fn
         self.magnitude = magnitude
         self.clients_state = {}
+        self.window_size = window_size
 
         # initialize storing variables
         self.old_update_list = []
@@ -520,13 +524,14 @@ class EnhancedServer(Server):
             ) # Calculate the gradient of the client's parameters with respect to the global model parameters (fitres.parameters, self.parameters)
             gradient_updates[fitres.metrics["partition_id"]] = -1*torch.tensor(flatten_params(gradient.tensors)).cpu() 
             # Add the weight update to the list, multiplied by -1 to make it a gradient
+        gradient_updates = {k: gradient_updates[k] for k in sorted(gradient_updates)}
         log(DEBUG, "Weight updates: %s", gradient_updates)
 
         current_global_weight = torch.tensor(flatten_params(parameters_to_ndarrays(self.parameters)))
         local_update_list = [local for _, local in gradient_updates.items()]
          
         # Detect malicious clients using FLDetector
-        if server_round > self.warmup_rounds + 1:
+        if server_round > self.window_size + 1:
             # self.sampling = 0
             log(DEBUG, "Starting to detect malicious clients")
 
@@ -541,23 +546,31 @@ class EnhancedServer(Server):
             log(DEBUG, "distance: %s, %s", distance, distance.shape)
             self.malicious_score = torch.cat((self.malicious_score, distance), dim=0)
             log(DEBUG, "self.malicious_score: %s, %s", self.malicious_score, self.malicious_score.shape)    
-            if self.malicious_score.shape[0] > self.warmup_rounds+1:
-                # if detection1(np.sum(self.malicious_score[-self.warmup_rounds:].numpy(), axis=0)):
-                #     label = detection(np.sum(self.malicious_score[-self.warmup_rounds:].numpy(), axis=0), 1)
-                # else:
-                #     label = np.ones(100)
-                selected_client = []
-                # for client in range(100):
-                #     if label[client] == 1:
-                #         selected_client.append(client)
-                # new_w_glob = FedAvg([w_locals[client] for client in selected_client])
-                log(DEBUG, "Detecting malicious clients")
 
+            if self.malicious_score.shape[0] >= self.window_size:
+                log(DEBUG, "Detecting malicious clients")
+                
+                if detection1(np.sum(self.malicious_score[-self.window_size:].numpy(), axis=0)):
+                    label = detection(np.sum(self.malicious_score[-self.window_size:].numpy(), axis=0), 1)
+                    log(DEBUG, "label: %s", label)
+                else:
+                    label = np.ones(self._client_manager.num_available())
+
+                selected_clients = []
+                for client in range(self._client_manager.num_available()):
+                    if label[client] == 1:
+                        for index in range(len(results)):
+                            if results[index][1].metrics["partition_id"] == client:
+                                selected_clients.append(results[index])
+                                log(DEBUG, "Partition id: %s", results[index][1].metrics["partition_id"])
+                                continue
+                        
+                # new_w_glob = FedAvg([w_locals[client] for client in selected_client])
                 # Aggregate training results
                 aggregated_result: tuple[
                     Optional[Parameters],
                     dict[str, Scalar],
-                ] = self.strategy.aggregate_fit(server_round, results, failures)
+                ] = self.strategy.aggregate_fit(server_round, selected_clients, failures)
             else:
                 # Aggregate training results
                 aggregated_result: tuple[
@@ -585,7 +598,7 @@ class EnhancedServer(Server):
             self.weight_record.append(current_global_weight.cpu() - self.last_weight.cpu())
             #deltaG
             self.update_record.append(update.cpu() -  self.last_update.cpu())
-        if server_round > self.warmup_rounds + 1: 
+        if server_round > self.window_size + 1: 
             del self.weight_record[0]
             del self.update_record[0]
 
