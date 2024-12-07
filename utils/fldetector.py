@@ -67,27 +67,6 @@ def lbfgs_torch(S_k_list, Y_k_list, v):
     return approx_prod.T
 
 def calculate_gradients(fitres_ndarrays, global_model_ndarrays, tensors_type="numpy.ndarray"):
-    """
-    Calculate the gradients between local fit results and a global model.
-
-    This function computes the difference between each tensor in the local fit 
-    results and the corresponding tensor in the global model. The tensors are 
-    padded with zeros to match sizes before computing the difference.
-
-    Parameters
-    ----------
-    fitres_ndarrays : list of np.ndarray
-        A list of numpy arrays representing the local fit results.
-    global_model_ndarrays : list of np.ndarray
-        A list of numpy arrays representing the global model's parameters.
-    tensors_type : str, optional
-        The type of the tensors to be returned (default is "numpy.ndarray").
-
-    Returns
-    -------
-    Parameters
-        A Parameters object containing the calculated gradients as tensors.
-    """
     gradients = []
     for fitres_tensor, global_model_tensor in zip(fitres_ndarrays, global_model_ndarrays):
         # Pad the smaller tensor with zeros
@@ -135,11 +114,23 @@ def detection(score, clients_state):
     if np.mean(score[label_pred==0])<np.mean(score[label_pred==1]):
         #0 is the label of malicious clients
         label_pred = 1 - label_pred
+
+    # Second prediction
+    data_pois_score = score[label_pred==1]
+    data_pois_indexes = np.where(label_pred==1)[0]
+
+    data_pois_estimator = KMeans(n_clusters=2)
+    data_pois_estimator.fit(data_pois_score.reshape(-1, 1))
+    
+    second_label_pred = data_pois_estimator.labels_
+    if np.mean(data_pois_score[second_label_pred==0])<np.mean(data_pois_score[second_label_pred==1]):
+        #0 is the label of malicious clients
+        second_label_pred = 1 - second_label_pred
+
+    final_label_pred = np.copy(label_pred)
+    final_label_pred[data_pois_indexes] = second_label_pred
+
     real_label=convert_clients_state_to_array(clients_state)
-    # acc=len(label_pred[label_pred==real_label])/100
-    # recall=1-np.sum(label_pred[:nobyz])/nobyz
-    # fpr=1-np.sum(label_pred[nobyz:])/(100-nobyz)
-    # fnr=np.sum(label_pred[:nobyz])/nobyz
     
     # Calculate metrics
     accuracy = accuracy_score(real_label, label_pred)
@@ -150,10 +141,7 @@ def detection(score, clients_state):
     log(DEBUG, "Accuracy: %s", accuracy)
     log(DEBUG, "Recall: %s", recall)
     log(DEBUG, "F1: %s", f1)
-    # print("acc %0.4f; recall %0.4f; fpr %0.4f; fnr %0.4f;" % (acc, recall, fpr, fnr))
-    # print(silhouette_score(score.reshape(-1, 1), label_pred))
-    # print('defence.py line233 label_pred (0 = malicious pred)', label_pred)
-    return label_pred
+    return final_label_pred
 
 def detection1(score):
     nrefs = 10

@@ -32,32 +32,6 @@ import numpy as np
 import timeit
 
 
-
-# def calculate_gradients(fitres, global_model):
-#     gradients = []
-#     for i in range(len(fitres.tensors)):
-#         fitres_tensor = torch.from_numpy(np.frombuffer(fitres.tensors[i], dtype=np.float32))
-#         global_model_tensor = torch.from_numpy(np.frombuffer(global_model.tensors[i], dtype=np.float32))
-
-#         # Pad the smaller tensor with zeros
-#         max_size = max(fitres_tensor.numel(), global_model_tensor.numel())
-#         fitres_tensor_padded = torch.cat((fitres_tensor, torch.zeros(max_size - fitres_tensor.numel())))
-#         global_model_tensor_padded = torch.cat((global_model_tensor, torch.zeros(max_size - global_model_tensor.numel())))
-        
-#         gradient = fitres_tensor_padded - global_model_tensor_padded
-#         gradients.append(gradient.numpy().tobytes())
-#     return Parameters(tensors=gradients, tensor_type=fitres.tensor_type)
-
-
-def parameters_dict_to_vector_flt(net_dict) -> torch.Tensor:
-    vec = []
-    for key, param in net_dict.items():
-        # print(key, torch.max(param))
-        if key.split('.')[-1] == 'num_batches_tracked' or key.split('.')[-1] == 'running_mean' or key.split('.')[-1] == 'running_var':
-            continue
-        vec.append(param.view(-1))
-    return torch.cat(vec)
-
 class EnhancedServer(Server):
     def __init__(
             self, 
@@ -210,6 +184,7 @@ class EnhancedServer(Server):
             server_round=server_round,
             parameters=self.parameters,
             client_manager=self._client_manager,
+            warmup_rounds=self.warmup_rounds
         )
 
         if not client_instructions:
