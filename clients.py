@@ -158,11 +158,9 @@ class FlowerClient(NumPyClient):
             poisoned_data = poison_data(self.trainloader, poison_ratio=self.datapoison_ratio)
             # Tạo lại DataLoader với dữ liệu đã bị nhiễm độc
             trainloader = DataLoader(poisoned_data, batch_size=BATCH_SIZE, collate_fn=collate_fn)#shuffle=True, 
-            log(INFO, "Client %s: Poisoned data", self.partition_id)
-              
+            log(INFO, "Client %s: Poisoned data", self.partition_id)             
         else:
             trainloader = self.trainloader
-        rnd = [1] #simulate server warmup round (chưa dùng tới)
         train(self.net, trainloader, epochs=self.epochs, device=self.device)
         return get_parameters(self.net), len(self.trainloader), {"node_id": self.node_id, "partition_id": self.partition_id}
 
