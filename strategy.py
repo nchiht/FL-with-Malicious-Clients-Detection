@@ -1,3 +1,5 @@
+from flwr.server.client_manager import ClientManager
+from flwr.server.client_proxy import ClientProxy
 from flwr.server.strategy import FedAvg, Krum, Strategy
 from flwr.server.strategy.aggregate import aggregate_krum
 from logging import WARNING
@@ -5,6 +7,7 @@ from typing import Callable, Optional, Union
 
 from flwr.common import (
     FitRes,
+    FitIns,
     MetricsAggregationFn,
     NDArrays,
     Parameters,
@@ -13,47 +16,8 @@ from flwr.common import (
     parameters_to_ndarrays,
 )
 from flwr.common.logger import log
-from flwr.server.client_proxy import ClientProxy
 import torch
 
-
-import torch
-
-# def l_bfgs(args, S_k_list, Y_k_list, v):
-#     device = torch.device("cpu")
-    
-#     # Concatenate S_k and Y_k along columns
-#     curr_S_k = torch.cat(S_k_list, dim=1).to(device)
-#     curr_Y_k = torch.cat(Y_k_list, dim=1).to(device)
-    
-#     # Compute matrix products
-#     S_k_time_Y_k = torch.matmul(curr_S_k.T, curr_Y_k)
-#     S_k_time_S_k = torch.matmul(curr_S_k.T, curr_S_k)
-    
-#     # Extract upper triangular matrix (R_k)
-#     R_k = torch.triu(S_k_time_Y_k)
-#     L_k = S_k_time_Y_k - R_k
-    
-#     # Compute sigma_k
-#     sigma_k = torch.matmul(Y_k_list[-1].T, S_k_list[-1]) / torch.matmul(S_k_list[-1].T, S_k_list[-1])
-    
-#     # Compute diagonal matrix (D_k_diag)
-#     D_k_diag = torch.diag(S_k_time_Y_k)
-    
-#     # Construct upper and lower parts of the matrix
-#     upper_mat = torch.cat([sigma_k * S_k_time_S_k, L_k], dim=1)
-#     lower_mat = torch.cat([L_k.T, -torch.diag(D_k_diag)], dim=1)
-#     mat = torch.cat([upper_mat, lower_mat], dim=0)
-    
-#     # Invert the matrix
-#     mat_inv = torch.linalg.inv(mat)
-    
-#     # Compute the approximate product
-#     approx_prod = sigma_k * v.to(device)
-#     p_mat = torch.cat([torch.matmul(curr_S_k.T, sigma_k * v), torch.matmul(curr_Y_k.T, v)], dim=0)
-#     approx_prod -= torch.matmul(torch.matmul(torch.cat([sigma_k * curr_S_k, curr_Y_k], dim=1), mat_inv), p_mat)
-    
-#     return approx_prod
 
 class EnhancedStrategy(FedAvg):
     def __init__(
@@ -137,3 +101,30 @@ class EnhancedStrategy(FedAvg):
             log(WARNING, "No fit_metrics_aggregation_fn provided")
 
         return parameters_aggregated, metrics_aggregated
+    
+    def configure_fit(
+        self, server_round: int, 
+        parameters: Parameters, 
+        client_manager: ClientManager,
+        warmup_rounds: int = 0
+    ) -> list[tuple[ClientProxy, FitIns]]:
+        """Configure the next round of training."""
+        config = {
+            "server_round": server_round,
+            "warmup_rounds": warmup_rounds,
+            }
+        if self.on_fit_config_fn is not None:
+            # Custom fit config function provided
+            config = self.on_fit_config_fn(server_round)
+        fit_ins = FitIns(parameters, config)
+
+        # Sample clients
+        sample_size, min_num_clients = self.num_fit_clients(
+            client_manager.num_available()
+        )
+        clients = client_manager.sample(
+            num_clients=sample_size, min_num_clients=min_num_clients
+        )
+
+        # Return client/config pairs
+        return [(client, fit_ins) for client in clients]

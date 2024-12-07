@@ -138,8 +138,17 @@ def collate_fn(batch):
     labels = torch.tensor([item["label"] for item in batch])
     return {"img": images, "label": labels}
 class FlowerClient(NumPyClient):
-    def __init__(self,parition_id, node_id, net, trainloader, valloader, device='cpu',
-                  epochs=1, datapoison_ratio=0):
+    def __init__(
+            self,
+            parition_id, 
+            node_id, 
+            net, 
+            trainloader, 
+            valloader, 
+            device='cpu',
+            epochs=1, 
+            datapoison_ratio=0
+        ):
         self.partition_id = parition_id 
         self.node_id = node_id
         self.net = net
@@ -154,11 +163,15 @@ class FlowerClient(NumPyClient):
 
     def fit(self, parameters, config):
         set_parameters(self.net, parameters)
-        if (self.datapoison_ratio > 0) and (self.partition_id in [0,1,2,3,4]): #TODO: thêm client_states và server_round từ server
+        if (
+            (self.datapoison_ratio > 0) and 
+            (self.partition_id in [0,1,2,3,4]) and 
+            (config["server_round"] > config["warmup_rounds"])
+        ): #TODO: thêm client_states và server_round từ server
             poisoned_data = poison_data(self.trainloader, poison_ratio=self.datapoison_ratio)
             # Tạo lại DataLoader với dữ liệu đã bị nhiễm độc
             trainloader = DataLoader(poisoned_data, batch_size=BATCH_SIZE, collate_fn=collate_fn)#shuffle=True, 
-            log(INFO, "Client %s: Poisoned data", self.partition_id)             
+            log(INFO, "Client %s: Poisoned data", self.partition_id) 
         else:
             trainloader = self.trainloader
         train(self.net, trainloader, epochs=self.epochs, device=self.device)

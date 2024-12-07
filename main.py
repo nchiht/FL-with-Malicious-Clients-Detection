@@ -16,7 +16,7 @@ from clients import get_parameters, set_parameters, test
 from utils import evaluation
 from utils.models import cifar10, mnist
 from attacks import no_attack, gaussian_attack 
-# from strategy import CustomFedAvg
+from strategy import EnhancedStrategy
 
 import torch
 import argparse
@@ -62,7 +62,7 @@ def server_fn(context: Context) -> ServerAppComponents:
     return ServerAppComponents(
         # strategy=strategy, 
         config=config, 
-        server=EnhancedServer(strategy=strategy, attack_fn=gaussian_attack, magnitude=4)
+        server=EnhancedServer(strategy=strategy, attack_fn=gaussian_attack, magnitude=1)
     )
 
 
@@ -121,28 +121,39 @@ if __name__ == '__main__':
         # TODO: add mnist
     }
 
-    strategy = FedAvg(
-        fraction_fit=1.0,  # Sample 100% of available clients for training
-        fraction_evaluate=0.5,  # Sample 50% of available clients for evaluation
-        min_fit_clients=10,  # Never sample less than 10 clients for training
-        min_evaluate_clients=5,  # Never sample less than 5 clients for evaluation
-        min_available_clients=10,  # Wait until all 10 clients are available
-        initial_parameters=ndarrays_to_parameters(get_parameters(model_with_dataset[dataset_id][0])),
-        evaluate_fn=evaluate_fn
-    )
+    # strategy = FedAvg(
+    #     fraction_fit=1.0,  # Sample 100% of available clients for training
+    #     fraction_evaluate=0.5,  # Sample 50% of available clients for evaluation
+    #     min_fit_clients=10,  # Never sample less than 10 clients for training
+    #     min_evaluate_clients=5,  # Never sample less than 5 clients for evaluation
+    #     min_available_clients=10,  # Wait until all 10 clients are available
+    #     initial_parameters=ndarrays_to_parameters(get_parameters(model_with_dataset[dataset_id][0])),
+    #     evaluate_fn=evaluate_fn
+    # )
 
     # strategy = Krum(
-    #     fraction_fit = 0.8,
+    #     fraction_fit = 1,
     #     fraction_evaluate = 0.5,
     #     min_fit_clients = 10,
     #     min_evaluate_clients = 5,
     #     min_available_clients = 10,
-    #     num_malicious_clients = 2,
-    #     num_clients_to_keep = 8,
+    #     num_malicious_clients = 5,
+    #     num_clients_to_keep = 20,
     #     evaluate_fn = evaluate_fn,
     #     initial_parameters = ndarrays_to_parameters(get_parameters(model_with_dataset[dataset_id][0])),
     # )
 
+    strategy = EnhancedStrategy(
+        fraction_fit = 1,
+        fraction_evaluate = 0.5,
+        min_fit_clients = 10,
+        min_evaluate_clients = 5,
+        min_available_clients = 10,
+        num_malicious_clients = 5,
+        num_clients_to_keep = 20,
+        evaluate_fn = evaluate_fn,
+        initial_parameters = ndarrays_to_parameters(get_parameters(model_with_dataset[dataset_id][0])),
+    )
     
 
     # Create the ClientApp
