@@ -106,12 +106,14 @@ class EnhancedStrategy(FedAvg):
         self, server_round: int, 
         parameters: Parameters, 
         client_manager: ClientManager,
-        warmup_rounds: int = 0
+        warmup_rounds: int = 0,
+        flags = None
     ) -> list[tuple[ClientProxy, FitIns]]:
         """Configure the next round of training."""
         config = {
             "server_round": server_round,
             "warmup_rounds": warmup_rounds,
+            "dp_flags": False
             }
         if self.on_fit_config_fn is not None:
             # Custom fit config function provided
@@ -125,6 +127,15 @@ class EnhancedStrategy(FedAvg):
         clients = client_manager.sample(
             num_clients=sample_size, min_num_clients=min_num_clients
         )
-
+        final_results = []
+        results = [(client, fit_ins) for client in clients]
+        for idx, (client, fit_ins) in enumerate(results):
+            config = dict(fit_ins.config)
+            config["dp_flags"] = flags[idx]
+            config["index"] = idx
+            new_fitins = FitIns(fit_ins.parameters, config)
+            # log(WARNING, "client index %s: %s/%s", idx, new_fitins.config["dp_flags"], flags[idx])
+            final_results.append((client, new_fitins))
         # Return client/config pairs
-        return [(client, fit_ins) for client in clients]
+        return final_results
+        # return [(client, fit_ins) for client in clients]

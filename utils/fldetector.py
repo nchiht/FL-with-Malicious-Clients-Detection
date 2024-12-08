@@ -3,7 +3,7 @@ from flwr.common.logger import log
 from logging import DEBUG, INFO, WARNING
 from typing import Optional, Callable, Union, List
 from sklearn.cluster import KMeans
-from sklearn.metrics import accuracy_score, recall_score, f1_score
+from sklearn.metrics import accuracy_score, recall_score, f1_score, confusion_matrix, precision_score
 import torch
 import numpy as np
 
@@ -106,7 +106,7 @@ def fld_distance(old_update_list, local_update_list, net_glob, attack_number, hv
     return distance
 
 
-def detection(score, clients_state):
+def detection(score, clients_state, flags):
     estimator = KMeans(n_clusters=2)
     estimator.fit(score.reshape(-1, 1))
     label_pred = estimator.labels_
@@ -131,17 +131,33 @@ def detection(score, clients_state):
     final_label_pred[data_pois_indexes] = second_label_pred
 
     real_label=convert_clients_state_to_array(clients_state)
+    dp_label = convert_clients_state_to_array(flags)
     
-    # Calculate metrics
-    accuracy = accuracy_score(real_label, label_pred)
-    recall = recall_score(real_label, label_pred)
-    f1 = f1_score(real_label, label_pred)
+    final_label = np.logical_and(real_label, dp_label).astype(int)
+    log(DEBUG, "final label: %s", final_label)
+    log(DEBUG, "final label pred: %s", final_label_pred)
 
+    # Calculate metrics
+    accuracy = accuracy_score(final_label, final_label_pred)
+    recall = recall_score(final_label, final_label_pred)
+    f1 = f1_score(final_label, final_label_pred)
+    precision = precision_score(final_label, final_label_pred)
+    cnfs_matrix = confusion_matrix(final_label, final_label_pred) # confusion_matrix(y_true, y_pred).ravel()
+
+    metrics = {}
     # Print metrics
     log(DEBUG, "Accuracy: %s", accuracy)
     log(DEBUG, "Recall: %s", recall)
     log(DEBUG, "F1: %s", f1)
-    return final_label_pred
+    log(DEBUG, "Precision: %s", precision)
+
+    metrics["accuracy"] = accuracy
+    metrics["recall"] = recall
+    metrics["f1"] = f1
+    metrics["precision"] = precision
+    metrics["confusion_matrix"] = cnfs_matrix
+
+    return final_label_pred, metrics
 
 def detection1(score):
     nrefs = 10

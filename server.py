@@ -44,7 +44,8 @@ class EnhancedServer(Server):
             num_malicious: int = 3,
             window_size: int = 3,
             attack_fn: Callable,
-            magnitude: float = 0.0
+            magnitude: float = 0.0,
+            num_data_poisoning: int = 2
         ) -> None:
 
         super().__init__(
@@ -62,6 +63,9 @@ class EnhancedServer(Server):
         self.magnitude = magnitude
         self.clients_state = {}
         self.window_size = window_size
+        self.num_data_poisoning = num_data_poisoning
+        self.list_data_poisoning = []
+        self.flags_data_poisoning = {}
 
         # initialize storing variables
         self.old_update_list = []
@@ -100,6 +104,49 @@ class EnhancedServer(Server):
             # res[1]["FN"] = 0
             history.add_loss_centralized(server_round=0, loss=res[0])
             history.add_metrics_centralized(server_round=0, metrics=res[1])
+
+        # size = self.num_malicious
+        log(INFO, "Selecting %s malicious clients", self.num_malicious + self.num_data_poisoning)
+        self.malicious_lst = np.random.choice(
+            range(self._client_manager.num_available()), size=self.num_malicious, replace=False
+        )
+        # Create a set of available clients excluding the malicious clients
+        available_clients = set(range(self._client_manager.num_available())) - set(self.malicious_lst)
+        self.list_data_poisoning = np.random.choice(
+            list(available_clients), size=self.num_data_poisoning, replace=False
+        )
+
+        # Create dict clients_state and flags for data poison to keep track of malicious clients
+        # clients_state = dict()
+        for idx, _ in enumerate(range(self._client_manager.num_available())):
+            self.clients_state[idx] = False
+            self.flags_data_poisoning[idx] = False
+
+            if idx in self.malicious_lst:
+                self.clients_state[idx] = True
+            if idx in self.list_data_poisoning:
+                self.flags_data_poisoning[idx] = True
+
+        # Sort clients states
+        self.clients_state = {k: self.clients_state[k] for k in sorted(self.clients_state)}
+        self.flags_data_poisoning = {k: self.flags_data_poisoning[k] for k in sorted(self.flags_data_poisoning)}
+        
+        log(
+            DEBUG,
+            """
+            malicious clients selected %s\n
+            clients_state: %s
+            data poisoning: %s
+            flags of data poisoning: %s
+            """,
+            self.malicious_lst,
+            self.clients_state,
+            self.list_data_poisoning,
+            self.flags_data_poisoning
+        )
+
+        # clients_state = self.clients_state
+        # flags_data_poisoning = self.flags_data_poisoning
 
         # Run federated learning for num_rounds
         log(INFO, "FL starting")
@@ -184,7 +231,8 @@ class EnhancedServer(Server):
             server_round=server_round,
             parameters=self.parameters,
             client_manager=self._client_manager,
-            warmup_rounds=self.warmup_rounds
+            warmup_rounds=self.warmup_rounds,
+            flags=self.flags_data_poisoning
         )
 
         if not client_instructions:
@@ -197,33 +245,7 @@ class EnhancedServer(Server):
             len(client_instructions),
             self._client_manager.num_available(),
         )
-        
-        # Randomly decide which client is malicious
-        # Chỉ chọn malicious clients ở round đầu tiên
-        if server_round == (self.warmup_rounds + 1):
-            size = self.num_malicious
-            log(INFO, "Selecting %s malicious clients", size)
-            self.malicious_lst = np.random.choice(
-                range(self._client_manager.num_available()), size=size, replace=False
-            )
 
-        # Create dict clients_state to keep track of malicious clients
-        # clients_state = dict()
-        for idx, (proxy, _) in enumerate(client_instructions):
-            self.clients_state[idx] = False
-            if idx in self.malicious_lst:
-                self.clients_state[idx] = True
-        # Sort clients states
-        self.clients_state = {k: self.clients_state[k] for k in sorted(self.clients_state)}
-        log(
-            DEBUG,
-            "fit_round %s: malicious clients selected %s, clients_state %s",
-            server_round,
-            self.malicious_lst,
-            self.clients_state
-        )
-
-        clients_state = self.clients_state
         # Collect `fit` results from all clients participating in this round
         results, failures = fit_clients(
             client_instructions=client_instructions,
@@ -242,6 +264,9 @@ class EnhancedServer(Server):
         #check
         # list_id = [(proxy.cid, fitres.metrics["partition_id"]) for proxy, fitres in results]
         # log(INFO, "List of clients' id and partition id: %s", list_id)
+
+        log(DEBUG, "Model poisoning: %s", self.malicious_lst)
+        log(DEBUG, "Data poisoning: %s", self.list_data_poisoning)
 
         # Save parameters of each client as time series
         ordered_results = [0 for _ in range(len(results))]
@@ -265,11 +290,9 @@ class EnhancedServer(Server):
             # ordered_results[int(fitres.metrics["node_id"])] = (proxy, fitres)
             ordered_results[idx] = (proxy, fitres)
 
-        log(INFO, "Clients state: %s", clients_state)
-
         # Initialize aggregated_parameters if it is the first round
         if self.aggregated_parameters == []:
-            for key, val in clients_state.items():
+            for key, val in self.clients_state.items():
                 if val is False:
                     # for idx, (proxy, fitres) in enumerate(ordered_results):
                     #     if proxy.cid == key:
@@ -291,7 +314,7 @@ class EnhancedServer(Server):
             log(INFO, "Applying attack function")
             results, others = self.attack_fn(
                 ordered_results,
-                clients_state,
+                self.clients_state,
                 # omniscent=self.omniscent,
                 magnitude=self.magnitude,
                 # w_re=self.aggregated_parameters,
@@ -305,7 +328,7 @@ class EnhancedServer(Server):
 
             # Update saved parameters time series after the attack
             for proxy, fitres in results:
-                if clients_state[fitres.metrics["partition_id"]]:
+                if self.clients_state[fitres.metrics["partition_id"]]:
                     if self.sampling > 0:
                         params = flatten_params(
                             parameters_to_ndarrays(fitres.parameters)
@@ -367,8 +390,11 @@ class EnhancedServer(Server):
                 log(DEBUG, "Detecting malicious clients")
                 
                 if detection1(np.sum(self.malicious_score[-self.window_size:].numpy(), axis=0)):
-                    label = detection(np.sum(self.malicious_score[-self.window_size:].numpy(), axis=0), clients_state)
-                    log(DEBUG, "label: %s", label)
+                    label, metrics_detection = detection(
+                                                    np.sum(self.malicious_score[-self.window_size:].numpy(), axis=0), 
+                                                    self.clients_state,
+                                                    self.flags_data_poisoning
+                                                )
                 else:
                     label = np.ones(self._client_manager.num_available())
 
@@ -401,21 +427,7 @@ class EnhancedServer(Server):
                 dict[str, Scalar],
             ] = self.strategy.aggregate_fit(server_round, results, failures)
             
-        # if server_round > 1:
-        #     results = results[0:7]
-        #     # Aggregate training results
-        #     aggregated_result: tuple[
-        #         Optional[Parameters],
-        #         dict[str, Scalar],
-        #     ] = self.strategy.aggregate_fit(server_round, results, failures)
-        # else:
-        #     # Aggregate training results
-        #     aggregated_result: tuple[
-        #         Optional[Parameters],
-        #         dict[str, Scalar],
-        #     ] = self.strategy.aggregate_fit(server_round, results, failures)
-
-        log(DEBUG, "results: %s", len(results))
+        # log(DEBUG, "results: %s", len(results))
 
         parameters_aggregated, metrics_aggregated = aggregated_result
         # new_global_weight = torch.tensor(flatten_params(parameters_to_ndarrays(parameters_aggregated)))
@@ -435,92 +447,9 @@ class EnhancedServer(Server):
 
         log(DEBUG, "weight record: %s", len(self.weight_record))
         log(DEBUG, "update record: %s", len(self.update_record))
-        # log(DEBUG, "current global weight: %s", current_global_weight)
-        # log(DEBUG, "last weight: %s", self.last_weight)
 
         self.last_update = update
         self.old_update_list = local_update_list
         self.last_weight = current_global_weight
 
-        # log(DEBUG, "last weight after: %s", self.last_weight)
-
-        return parameters_aggregated, metrics_aggregated, (results, failures)
-
-        
-        # good_clients_idx = []
-        # malicious_clients_idx = []
-        # if isinstance(self.strategy, Flanders):
-        #     # Aggregate training results
-        #     log(INFO, "fit_round - Aggregating training results")
-        #     aggregated_result = self.strategy.aggregate_fit(server_round, results, failures, clients_state)
-        #     (
-        #         parameters_aggregated,
-        #         metrics_aggregated,
-        #         good_clients_idx,
-        #         malicious_clients_idx,
-        #     ) = aggregated_result
-        #     log(INFO, "Malicious clients: %s", malicious_clients_idx)
-
-        #     log(INFO, "clients_state: %s", clients_state)
-
-        #     # For clients detected as malicious, replace the last params in
-        #     # their history with tha current global model, otherwise the
-        #     # forecasting in next round won't be reliable (see the paper for
-        #     # more details)
-        #     if server_round > self.warmup_rounds:
-        #         log(INFO, "Saving parameters of clients")
-        #         for idx in malicious_clients_idx:
-        #             if self.sampling > 0:
-        #                 new_params = flatten_params(
-        #                     parameters_to_ndarrays(parameters_aggregated)
-        #                 )[self.params_indexes]
-        #             else:
-        #                 new_params = flatten_params(
-        #                     parameters_to_ndarrays(parameters_aggregated)
-        #                 )
-
-        #             print(f"Saving parameters of client {idx} with shape {new_params.shape}")
-        #             save_params(
-        #                 new_params,
-        #                 idx,
-        #                 params_dir=self.history_dir,
-        #                 remove_last=True,
-        #                 rrl=False,
-        #             )
-        # elif isinstance(self.strategy, DnC):
-        #     log(INFO, "fit_round - Aggregating training results")
-        #     aggregated_result = self.strategy.aggregate_fit(server_round, results, failures, clients_state)
-        #     parameters_aggregated, metrics_aggregated = aggregated_result
-        # else:
-        #     # Aggregate training results
-        #     log(INFO, "fit_round - Aggregating training results")
-        #     aggregated_result = self.strategy.aggregate_fit(server_round, results, failures)
-        #     parameters_aggregated, metrics_aggregated = aggregated_result
-
-        # self.clients_state = clients_state
-        # self.good_clients_idx = good_clients_idx
-        # self.malicious_clients_idx = malicious_clients_idx
-        # return parameters_aggregated, metrics_aggregated, (results, failures)
-        
-        # # Collect `fit` results from all clients participating in this round
-        # results, failures = fit_clients(
-        #     client_instructions=client_instructions,
-        #     max_workers=self.max_workers,
-        #     timeout=timeout,
-        #     group_id=server_round,
-        # )
-        # log(
-        #     INFO,
-        #     "aggregate_fit: received %s results and %s failures",
-        #     len(results),
-        #     len(failures),
-        # )
-
-        # Aggregate training results
-        aggregated_result: tuple[
-            Optional[Parameters],
-            dict[str, Scalar],
-        ] = self.strategy.aggregate_fit(server_round, results, failures)
-
-        parameters_aggregated, metrics_aggregated = aggregated_result
         return parameters_aggregated, metrics_aggregated, (results, failures)

@@ -163,9 +163,12 @@ class FlowerClient(NumPyClient):
 
     def fit(self, parameters, config):
         set_parameters(self.net, parameters)
+        self.partition_id = config["index"]
+        # log(INFO, "dp flag client %s: %s", self.partition_id, config["dp_flags"])
         if (
             (self.datapoison_ratio > 0) and 
-            (self.partition_id in [0,1,2,3,4]) and 
+            # (self.partition_id in [0,1,2,3,4]) and 
+            (config["dp_flags"]) and 
             (config["server_round"] > config["warmup_rounds"])
         ): #TODO: thêm client_states và server_round từ server
             poisoned_data = poison_data(self.trainloader, poison_ratio=self.datapoison_ratio)
