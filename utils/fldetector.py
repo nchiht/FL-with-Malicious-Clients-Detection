@@ -106,7 +106,7 @@ def fld_distance(old_update_list, local_update_list, net_glob, attack_number, hv
     return distance
 
 
-def detection(score, clients_state, flags):
+def detection(score, clients_state, flags, steps=1):
     estimator = KMeans(n_clusters=2)
     estimator.fit(score.reshape(-1, 1))
     label_pred = estimator.labels_
@@ -115,49 +115,75 @@ def detection(score, clients_state, flags):
         #0 is the label of malicious clients
         label_pred = 1 - label_pred
 
-    # Second prediction
-    data_pois_score = score[label_pred==1]
-    data_pois_indexes = np.where(label_pred==1)[0]
-
-    data_pois_estimator = KMeans(n_clusters=2)
-    data_pois_estimator.fit(data_pois_score.reshape(-1, 1))
-    
-    second_label_pred = data_pois_estimator.labels_
-    if np.mean(data_pois_score[second_label_pred==0])<np.mean(data_pois_score[second_label_pred==1]):
-        #0 is the label of malicious clients
-        second_label_pred = 1 - second_label_pred
-
-    final_label_pred = np.copy(label_pred)
-    final_label_pred[data_pois_indexes] = second_label_pred
-
-    real_label=convert_clients_state_to_array(clients_state)
-    dp_label = convert_clients_state_to_array(flags)
-    
-    final_label = np.logical_and(real_label, dp_label).astype(int)
-    log(DEBUG, "final label: %s", final_label)
-    log(DEBUG, "final label pred: %s", final_label_pred)
-
-    # Calculate metrics
-    accuracy = accuracy_score(final_label, final_label_pred)
-    recall = recall_score(final_label, final_label_pred)
-    f1 = f1_score(final_label, final_label_pred)
-    precision = precision_score(final_label, final_label_pred)
-    cnfs_matrix = confusion_matrix(final_label, final_label_pred) # confusion_matrix(y_true, y_pred).ravel()
-
     metrics = {}
-    # Print metrics
-    log(DEBUG, "Accuracy: %s", accuracy)
-    log(DEBUG, "Recall: %s", recall)
-    log(DEBUG, "F1: %s", f1)
-    log(DEBUG, "Precision: %s", precision)
+    
+    if steps == 1:
+        real_label=convert_clients_state_to_array(clients_state)
 
-    metrics["accuracy"] = accuracy
-    metrics["recall"] = recall
-    metrics["f1"] = f1
-    metrics["precision"] = precision
-    metrics["confusion_matrix"] = cnfs_matrix
+        accuracy = accuracy_score(real_label, label_pred)
+        recall = recall_score(real_label, label_pred)
+        f1 = f1_score(real_label, label_pred)
+        precision = precision_score(real_label, label_pred)
+        cnfs_matrix = confusion_matrix(real_label, label_pred) # confusion_matrix(y_true, y_pred).ravel()
+        
 
-    return final_label_pred, metrics
+        metrics["accuracy"] = accuracy
+        metrics["recall"] = recall
+        metrics["f1"] = f1
+        metrics["precision"] = precision
+        metrics["confusion_matrix"] = cnfs_matrix
+        # Print metrics
+        log(DEBUG, "Accuracy: %s", accuracy)
+        log(DEBUG, "Recall: %s", recall)
+        log(DEBUG, "F1: %s", f1)
+        log(DEBUG, "Precision: %s", precision)
+
+        return label_pred, metrics
+
+    else:
+        # Second prediction
+        data_pois_score = score[label_pred==1]
+        data_pois_indexes = np.where(label_pred==1)[0]
+
+        data_pois_estimator = KMeans(n_clusters=2)
+        data_pois_estimator.fit(data_pois_score.reshape(-1, 1))
+        
+        second_label_pred = data_pois_estimator.labels_
+        if np.mean(data_pois_score[second_label_pred==0])<np.mean(data_pois_score[second_label_pred==1]):
+            #0 is the label of malicious clients
+            second_label_pred = 1 - second_label_pred
+
+        final_label_pred = np.copy(label_pred)
+        final_label_pred[data_pois_indexes] = second_label_pred
+
+        real_label=convert_clients_state_to_array(clients_state)
+        dp_label = convert_clients_state_to_array(flags)
+        
+        final_label = np.logical_and(real_label, dp_label).astype(int)
+        log(DEBUG, "final label: %s", final_label)
+        log(DEBUG, "final label pred: %s", final_label_pred)
+
+        # Calculate metrics
+        accuracy = accuracy_score(final_label, final_label_pred)
+        recall = recall_score(final_label, final_label_pred)
+        f1 = f1_score(final_label, final_label_pred)
+        precision = precision_score(final_label, final_label_pred)
+        cnfs_matrix = confusion_matrix(final_label, final_label_pred) # confusion_matrix(y_true, y_pred).ravel()
+
+
+        metrics["accuracy"] = accuracy
+        metrics["recall"] = recall
+        metrics["f1"] = f1
+        metrics["precision"] = precision
+        metrics["confusion_matrix"] = cnfs_matrix
+        # Print metrics
+        log(DEBUG, "Accuracy: %s", accuracy)
+        log(DEBUG, "Recall: %s", recall)
+        log(DEBUG, "F1: %s", f1)
+        log(DEBUG, "Precision: %s", precision)
+
+
+        return final_label_pred, metrics
 
 def detection1(score):
     nrefs = 10

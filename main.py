@@ -57,12 +57,19 @@ def server_fn(context: Context) -> ServerAppComponents:
     """
 
     # Configure the server for 5 rounds of training
-    config = ServerConfig(num_rounds=5)
+    config = ServerConfig(num_rounds=15)
 
     return ServerAppComponents(
         # strategy=strategy, 
         config=config, 
-        server=EnhancedServer(strategy=strategy, attack_fn=gaussian_attack, magnitude=1)
+        server=EnhancedServer(
+            strategy=strategy, 
+            attack_fn=gaussian_attack, 
+            magnitude=1, 
+            num_malicious=10, 
+            num_data_poisoning=7, 
+            window_size=5
+        )
     )
 
 
@@ -83,7 +90,7 @@ def client_fn(context: Context) -> Client:
     # FlowerClient is a subclass of NumPyClient, so we need to call .to_client()
     # to convert it to a subclass of `flwr.client.Client`
     return FlowerClient(partition_id, node_id, net, trainloader, valloader, device=device,
-                         epochs=5, datapoison_ratio=0.5, target=False).to_client()
+                         epochs=10, datapoison_ratio=0.5, target=True).to_client()
 
 
 if __name__ == '__main__':
@@ -149,10 +156,10 @@ if __name__ == '__main__':
         min_fit_clients = 10,
         min_evaluate_clients = 5,
         min_available_clients = 10,
-        num_malicious_clients = 5,
-        num_clients_to_keep = 20,
+        num_malicious_clients = 10,
+        num_clients_to_keep = 30,
         evaluate_fn = evaluate_fn,
-        initial_parameters = ndarrays_to_parameters(get_parameters(model_with_dataset[dataset_id][0])),
+        initial_parameters = ndarrays_to_parameters(get_parameters(model_with_dataset[dataset_id][0]))
     )
     
 

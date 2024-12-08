@@ -364,7 +364,7 @@ class EnhancedServer(Server):
             gradient_updates[fitres.metrics["partition_id"]] = -1*torch.tensor(flatten_params(gradient.tensors)).cpu() 
             # Add the weight update to the list, multiplied by -1 to make it a gradient
         gradient_updates = {k: gradient_updates[k] for k in sorted(gradient_updates)}
-        log(DEBUG, "Weight updates: %s", gradient_updates)
+        # log(DEBUG, "Weight updates: %s", gradient_updates)
 
         current_global_weight = torch.tensor(flatten_params(parameters_to_ndarrays(self.parameters)))
         local_update_list = [local for _, local in gradient_updates.items()]
@@ -376,15 +376,15 @@ class EnhancedServer(Server):
 
             # Calculate the distance between the global model and the local model
             hvp = lbfgs_torch(self.weight_record, self.update_record, current_global_weight - self.last_weight) 
-            log(DEBUG, "hvp: %s", hvp)
-            log(DEBUG, "local update list i: %s", local_update_list[0].shape)
+            # log(DEBUG, "hvp: %s", hvp)
+            # log(DEBUG, "local update list i: %s", local_update_list[0].shape)
             # distance = fld_distance(old_update_list, gradient_updates, None, None, hvp)
             distance = fld_distance(self.old_update_list, local_update_list, None, None, hvp)
-            log(DEBUG, "original distance: %s", distance)
+            # log(DEBUG, "original distance: %s", distance)
             distance = distance.view(1,-1)
-            log(DEBUG, "distance: %s, %s", distance, distance.shape)
+            # log(DEBUG, "distance: %s, %s", distance, distance.shape)
             self.malicious_score = torch.cat((self.malicious_score, distance), dim=0)
-            log(DEBUG, "self.malicious_score: %s, %s", self.malicious_score, self.malicious_score.shape)    
+            # log(DEBUG, "self.malicious_score: %s, %s", self.malicious_score, self.malicious_score.shape)    
 
             if self.malicious_score.shape[0] >= self.window_size:
                 log(DEBUG, "Detecting malicious clients")
@@ -404,7 +404,7 @@ class EnhancedServer(Server):
                         for index in range(len(results)):
                             if results[index][1].metrics["partition_id"] == client:
                                 selected_clients.append(results[index])
-                                log(DEBUG, "Partition id: %s", results[index][1].metrics["partition_id"])
+                                # log(DEBUG, "Partition id: %s", results[index][1].metrics["partition_id"])
                                 continue
                         
                 # new_w_glob = FedAvg([w_locals[client] for client in selected_client])
@@ -445,8 +445,8 @@ class EnhancedServer(Server):
             del self.weight_record[0]
             del self.update_record[0]
 
-        log(DEBUG, "weight record: %s", len(self.weight_record))
-        log(DEBUG, "update record: %s", len(self.update_record))
+        # log(DEBUG, "weight record: %s", len(self.weight_record))
+        # log(DEBUG, "update record: %s", len(self.update_record))
 
         self.last_update = update
         self.old_update_list = local_update_list
