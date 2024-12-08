@@ -126,6 +126,8 @@ def detection(score, clients_state, flags, steps=1):
         precision = precision_score(real_label, label_pred)
         cnfs_matrix = confusion_matrix(real_label, label_pred) # confusion_matrix(y_true, y_pred).ravel()
         
+        log(DEBUG, "final label: %s", real_label)
+        log(DEBUG, "final label pred: %s", label_pred)
 
         metrics["accuracy"] = accuracy
         metrics["recall"] = recall
