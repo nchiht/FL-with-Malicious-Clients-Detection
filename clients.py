@@ -130,6 +130,39 @@ def poison_data(train_loader, poison_ratio=0):
     poisoned_dataset = Dataset.from_dict({"img": poisoned_data["img"], "label": poisoned_data["label"]})
     return poisoned_dataset
 
+def poison_data_utg(train_loader, poison_ratio=0):
+    """
+    Thay đổi nhãn dữ liệu trong train_loader bằng cách thực hiện data flipping.
+    Args:
+        train_loader: Dataloader chứa dữ liệu huấn luyện.
+        poison_ratio: Tỉ lệ nhãn bị thay đổi (mặc định 0%).
+    Returns:
+        poisoned_dataset: Một đối tượng datasets.Dataset chứa dữ liệu đã bị thay đổi nhãn.
+    """
+    poisoned_data = {"img": [], "label": []}
+    
+    for batch in train_loader:
+        inputs, labels = batch["img"], batch["label"]
+
+        for i in range(len(labels)):
+            if torch.rand(1).item() < poison_ratio:
+                labels[i] = np.random.randint(0, 10)
+                # labels[i] = (labels[i] + 1) % 10
+
+        # Chuyển từng phần tử của inputs thành torch.Tensor nếu chưa phải
+        inputs = [torch.tensor(img) if not isinstance(img, torch.Tensor) else img for img in inputs]
+
+        poisoned_data["img"].extend(inputs)
+        poisoned_data["label"].extend(labels)
+    
+    # Chuyển đổi dữ liệu thành torch.Tensor
+    poisoned_data["img"] = [torch.tensor(img) if isinstance(img, list) else img for img in poisoned_data["img"]]
+    poisoned_data["label"] = torch.tensor(poisoned_data["label"])
+    
+    # Tạo datasets.Dataset
+    poisoned_dataset = Dataset.from_dict({"img": poisoned_data["img"], "label": poisoned_data["label"]})
+    return poisoned_dataset
+
 def collate_fn(batch):
     """
     Chuẩn hóa batch để tạo Tensor từ dữ liệu.
@@ -147,7 +180,8 @@ class FlowerClient(NumPyClient):
             valloader, 
             device='cpu',
             epochs=1, 
-            datapoison_ratio=0
+            datapoison_ratio=0,
+            target=True
         ):
         self.partition_id = parition_id 
         self.node_id = node_id
@@ -157,6 +191,7 @@ class FlowerClient(NumPyClient):
         self.device = torch.device(device)
         self.epochs = epochs
         self.datapoison_ratio = datapoison_ratio
+        self.target = target
 
     def get_parameters(self, config):
         return get_parameters(self.net)
@@ -171,7 +206,12 @@ class FlowerClient(NumPyClient):
             (config["dp_flags"]) and 
             (config["server_round"] > config["warmup_rounds"])
         ): #TODO: thêm client_states và server_round từ server
-            poisoned_data = poison_data(self.trainloader, poison_ratio=self.datapoison_ratio)
+            if self.target:
+                poisoned_data = poison_data(self.trainloader, poison_ratio=self.datapoison_ratio)
+                print("Target")
+            else:
+                poisoned_data = poison_data_utg(self.trainloader, poison_ratio=self.datapoison_ratio)
+                print("UTG")
             # Tạo lại DataLoader với dữ liệu đã bị nhiễm độc
             trainloader = DataLoader(poisoned_data, batch_size=BATCH_SIZE, collate_fn=collate_fn)#shuffle=True, 
             log(INFO, "Client %s: Poisoned data", self.partition_id) 

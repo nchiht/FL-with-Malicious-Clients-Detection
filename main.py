@@ -57,7 +57,7 @@ def server_fn(context: Context) -> ServerAppComponents:
     """
 
     # Configure the server for 5 rounds of training
-    config = ServerConfig(num_rounds=9)
+    config = ServerConfig(num_rounds=5)
 
     return ServerAppComponents(
         # strategy=strategy, 
@@ -83,7 +83,7 @@ def client_fn(context: Context) -> Client:
     # FlowerClient is a subclass of NumPyClient, so we need to call .to_client()
     # to convert it to a subclass of `flwr.client.Client`
     return FlowerClient(partition_id, node_id, net, trainloader, valloader, device=device,
-                         epochs=5, datapoison_ratio=0.5).to_client()
+                         epochs=5, datapoison_ratio=0.5, target=False).to_client()
 
 
 if __name__ == '__main__':
