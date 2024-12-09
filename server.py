@@ -237,8 +237,7 @@ class EnhancedServer(Server):
 
         detection_df = pd.DataFrame(
             self.metrics_detection_df,
-            columns=["server_round", "accuracy", "recall", "f1_score", "precision", "confusion_matrix"], 
-            index=False
+            columns=["server_round", "accuracy", "recall", "f1_score", "precision", "confusion_matrix"]
         )
         detection_df.to_csv("data/metrics/detection_metrics.csv", index=False)
         log(INFO, "Detection metrics saved")
