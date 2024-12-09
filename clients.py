@@ -98,7 +98,7 @@ def get_parameters(net) -> List[np.ndarray]:
     return [val.cpu().numpy() for _, val in net.state_dict().items()]
 
 #Posion data
-def poison_data(train_loader, poison_ratio=0):
+def poison_data(train_loader, poison_ratio=0, net=cifar10.cifar10_Net()):
     """
     Thay đổi nhãn dữ liệu trong train_loader bằng cách thực hiện data flipping.
     Args:
@@ -110,7 +110,10 @@ def poison_data(train_loader, poison_ratio=0):
     poisoned_data = {"img": [], "label": []}
     
     for batch in train_loader:
-        inputs, labels = batch["img"], batch["label"]
+        if(net._get_name() == "cifar10_Net"): # TODO: depends on models
+            inputs, labels = batch["img"], batch["label"]
+        if(net._get_name() == "mnist_Net"):
+            inputs, labels = batch["image"], batch["label"]
 
         for i in range(len(labels)):
             if torch.rand(1).item() < poison_ratio:
@@ -130,7 +133,7 @@ def poison_data(train_loader, poison_ratio=0):
     poisoned_dataset = Dataset.from_dict({"img": poisoned_data["img"], "label": poisoned_data["label"]})
     return poisoned_dataset
 
-def poison_data_utg(train_loader, poison_ratio=0):
+def poison_data_utg(train_loader, poison_ratio=0, net=cifar10.cifar10_Net()):
     """
     Thay đổi nhãn dữ liệu trong train_loader bằng cách thực hiện data flipping.
     Args:
@@ -142,7 +145,10 @@ def poison_data_utg(train_loader, poison_ratio=0):
     poisoned_data = {"img": [], "label": []}
     
     for batch in train_loader:
-        inputs, labels = batch["img"], batch["label"]
+        if(net._get_name() == "cifar10_Net"): # TODO: depends on models
+            inputs, labels = batch["img"], batch["label"]
+        if(net._get_name() == "mnist_Net"):
+            inputs, labels = batch["image"], batch["label"]
 
         for i in range(len(labels)):
             if torch.rand(1).item() < poison_ratio:
@@ -207,10 +213,10 @@ class FlowerClient(NumPyClient):
             (config["server_round"] > config["warmup_rounds"])
         ): #TODO: thêm client_states và server_round từ server
             if self.target:
-                poisoned_data = poison_data(self.trainloader, poison_ratio=self.datapoison_ratio)
+                poisoned_data = poison_data(self.trainloader, poison_ratio=self.datapoison_ratio, net=self.net)
                 print("Target")
             else:
-                poisoned_data = poison_data_utg(self.trainloader, poison_ratio=self.datapoison_ratio)
+                poisoned_data = poison_data_utg(self.trainloader, poison_ratio=self.datapoison_ratio, net=self.net)
                 print("UTG")
             # Tạo lại DataLoader với dữ liệu đã bị nhiễm độc
             trainloader = DataLoader(poisoned_data, batch_size=BATCH_SIZE, collate_fn=collate_fn)#shuffle=True, 

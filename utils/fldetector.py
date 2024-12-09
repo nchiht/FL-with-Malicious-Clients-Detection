@@ -137,7 +137,7 @@ def detection(score, clients_state, flags, steps=1):
         metrics["recall"] = recall
         metrics["f1"] = f1
         metrics["precision"] = precision
-        metrics["confusion_matrix"] = cnfs_matrix
+        metrics["confusion_matrix"] = cnfs_matrix.ravel()
         # Print metrics
         log(DEBUG, "Accuracy: %s", accuracy)
         log(DEBUG, "Recall: %s", recall)
@@ -177,7 +177,7 @@ def detection(score, clients_state, flags, steps=1):
         metrics["recall"] = recall
         metrics["f1"] = f1
         metrics["precision"] = precision
-        metrics["confusion_matrix"] = cnfs_matrix
+        metrics["confusion_matrix"] = cnfs_matrix.ravel()
         # Print metrics
         log(DEBUG, "Accuracy: %s", accuracy)
         log(DEBUG, "Recall: %s", recall)

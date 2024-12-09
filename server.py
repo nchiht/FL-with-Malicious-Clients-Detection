@@ -96,6 +96,8 @@ class EnhancedServer(Server):
         self.malicious_score = torch.zeros(self._client_manager.num_available())
         self.last_weight = torch.tensor([])
 
+        self.metrics_detection_df = []
+
     def fit(self, num_rounds, timeout):
         """Run federated averaging for a number of rounds."""
         history = Hist()
@@ -233,8 +235,16 @@ class EnhancedServer(Server):
         elapsed = end_time - start_time
         log(INFO, "FL finished in %s", elapsed)
 
+        detection_df = pd.DataFrame(
+            self.metrics_detection_df,
+            columns=["server_round", "accuracy", "recall", "f1_score", "precision", "confusion_matrix"], 
+            index=False
+        )
+        detection_df.to_csv("data/metrics/detection_metrics.csv", index=False)
+        log(INFO, "Detection metrics saved")
+
         history.to_dataframes()
-        
+
         return history, elapsed
 
     def fit_round(
@@ -394,15 +404,9 @@ class EnhancedServer(Server):
 
             # Calculate the distance between the global model and the local model
             hvp = lbfgs_torch(self.weight_record, self.update_record, current_global_weight - self.last_weight) 
-            # log(DEBUG, "hvp: %s", hvp)
-            # log(DEBUG, "local update list i: %s", local_update_list[0].shape)
-            # distance = fld_distance(old_update_list, gradient_updates, None, None, hvp)
             distance = fld_distance(self.old_update_list, local_update_list, None, None, hvp)
-            # log(DEBUG, "original distance: %s", distance)
             distance = distance.view(1,-1)
-            # log(DEBUG, "distance: %s, %s", distance, distance.shape)
             self.malicious_score = torch.cat((self.malicious_score, distance), dim=0)
-            # log(DEBUG, "self.malicious_score: %s, %s", self.malicious_score, self.malicious_score.shape)    
 
             if self.malicious_score.shape[0] >= self.window_size:
                 log(DEBUG, "Detecting malicious clients")
@@ -414,6 +418,20 @@ class EnhancedServer(Server):
                                                     self.flags_data_poisoning,
                                                     steps=select_k - 1
                                                 )
+
+                    metrics_detection["server_round"] = server_round
+                    data = [
+                        metrics_detection["server_round"],
+                        metrics_detection["accuracy"],
+                        metrics_detection["recall"],
+                        metrics_detection["f1"],
+                        metrics_detection["precision"],
+                        metrics_detection["confusion_matrix"]
+                    ]
+                    log(DEBUG, "Data: %s", data)
+                    self.metrics_detection_df.append(data)
+                    log(DEBUG, "Detection metrics: %s", self.metrics_detection_df)
+
                 else:
                     label = np.ones(self._client_manager.num_available())
 
@@ -425,8 +443,6 @@ class EnhancedServer(Server):
                                 selected_clients.append(results[index])
                                 continue
                         
-                # new_w_glob = FedAvg([w_locals[client] for client in selected_client])
-
                 log(DEBUG, "Nunber of aggregated clients: %s", len(selected_clients))
                 # Aggregate training results
                 aggregated_result: tuple[
