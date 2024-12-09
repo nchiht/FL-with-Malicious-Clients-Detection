@@ -30,8 +30,28 @@ from typing import Optional, Callable, Union, List
 import torch
 import numpy as np
 import timeit
+import pandas as pd
 
 
+class Hist(History):
+    def __init__(self):
+        super().__init__()
+        self.confusion_matrix = {"TP": 0, "TN": 0, "FP": 0, "FN": 0}
+    def to_dataframes(self):
+        """Convert losses and metrics to pandas DataFrames."""
+        # Convert losses_centralized to DataFrame
+        df_losses_centralized = pd.DataFrame(self.losses_centralized, columns=["round", "loss"])
+        df_losses_centralized.to_csv("data/metrics/losses_centralized.csv", index=False)
+        # Convert metrics_centralized to DataFrame
+        metrics_data = []
+        for key, values in self.metrics_centralized.items():
+            for round, value in values:
+                metrics_data.append({"round": round, "accuracy": value})
+        df_metrics_centralized = pd.DataFrame(metrics_data)
+        df_metrics_centralized.to_csv("data/metrics/metrics_centralized.csv", index=False)
+        log(INFO, "DataFrames saved")
+        return df_losses_centralized, df_metrics_centralized
+    
 class EnhancedServer(Server):
     def __init__(
             self, 
@@ -45,7 +65,8 @@ class EnhancedServer(Server):
             window_size: int = 3,
             attack_fn: Callable,
             magnitude: float = 0.0,
-            num_data_poisoning: int = 2
+            num_data_poisoning: int = 2,
+            steps: int = 1
         ) -> None:
 
         super().__init__(
@@ -66,6 +87,7 @@ class EnhancedServer(Server):
         self.num_data_poisoning = num_data_poisoning
         self.list_data_poisoning = []
         self.flags_data_poisoning = {}
+        self.steps = steps
 
         # initialize storing variables
         self.old_update_list = []
@@ -74,16 +96,9 @@ class EnhancedServer(Server):
         self.malicious_score = torch.zeros(self._client_manager.num_available())
         self.last_weight = torch.tensor([])
 
-        # # # initialize storing variables
-        # # self.old_update_list = []
-        # # self.weight_record = []
-        # # self.update_record = []
-        # # self.malicious_score = torch.zeros(self._client_manager.num_available())
-        # # self.last_weight = torch.tensor([])
-
     def fit(self, num_rounds, timeout):
         """Run federated averaging for a number of rounds."""
-        history = History()
+        history = Hist()
 
         # Initialize parameters
         log(INFO, "Initializing global parameters")
@@ -217,6 +232,9 @@ class EnhancedServer(Server):
         end_time = timeit.default_timer()
         elapsed = end_time - start_time
         log(INFO, "FL finished in %s", elapsed)
+
+        history.to_dataframes()
+        
         return history, elapsed
 
     def fit_round(
@@ -388,12 +406,13 @@ class EnhancedServer(Server):
 
             if self.malicious_score.shape[0] >= self.window_size:
                 log(DEBUG, "Detecting malicious clients")
-                
-                if detection1(np.sum(self.malicious_score[-self.window_size:].numpy(), axis=0)):
+                check_attack, select_k = detection1(np.sum(self.malicious_score[-self.window_size:].numpy(), axis=0))
+                if check_attack:
                     label, metrics_detection = detection(
                                                     np.sum(self.malicious_score[-self.window_size:].numpy(), axis=0), 
                                                     self.clients_state,
-                                                    self.flags_data_poisoning
+                                                    self.flags_data_poisoning,
+                                                    steps=select_k - 1
                                                 )
                 else:
                     label = np.ones(self._client_manager.num_available())
@@ -404,22 +423,25 @@ class EnhancedServer(Server):
                         for index in range(len(results)):
                             if results[index][1].metrics["partition_id"] == client:
                                 selected_clients.append(results[index])
-                                # log(DEBUG, "Partition id: %s", results[index][1].metrics["partition_id"])
                                 continue
                         
                 # new_w_glob = FedAvg([w_locals[client] for client in selected_client])
+
+                log(DEBUG, "Nunber of aggregated clients: %s", len(selected_clients))
                 # Aggregate training results
                 aggregated_result: tuple[
                     Optional[Parameters],
                     dict[str, Scalar],
                 ] = self.strategy.aggregate_fit(server_round, selected_clients, failures)
             else:
+                log(DEBUG, "Nunber of aggregated clients: %s", len(results))
                 # Aggregate training results
                 aggregated_result: tuple[
                     Optional[Parameters],
                     dict[str, Scalar],
                 ] = self.strategy.aggregate_fit(server_round, results, failures)
         else:
+            log(DEBUG, "Nunber of aggregated clients: %s", len(results))
             hvp = None
             # Aggregate training results
             aggregated_result: tuple[
@@ -427,16 +449,12 @@ class EnhancedServer(Server):
                 dict[str, Scalar],
             ] = self.strategy.aggregate_fit(server_round, results, failures)
             
-        # log(DEBUG, "results: %s", len(results))
-
         parameters_aggregated, metrics_aggregated = aggregated_result
-        # new_global_weight = torch.tensor(flatten_params(parameters_to_ndarrays(parameters_aggregated)))
         #gradient global
         update = calculate_gradients(parameters_to_ndarrays(self.parameters), parameters_to_ndarrays(parameters_aggregated))  #w_t+1 = w_t - a*g_t => g_t = w_t - w_t+1 (a=1)
         update = torch.tensor(flatten_params(update.tensors))
 
         if server_round > 1:
-            # log(DEBUG, "Gap: %s", current_global_weight.cpu() - self.last_weight.cpu())
             #deltaW
             self.weight_record.append(current_global_weight.cpu() - self.last_weight.cpu())
             #deltaG
@@ -444,9 +462,6 @@ class EnhancedServer(Server):
         if server_round > self.window_size + 1: 
             del self.weight_record[0]
             del self.update_record[0]
-
-        # log(DEBUG, "weight record: %s", len(self.weight_record))
-        # log(DEBUG, "update record: %s", len(self.update_record))
 
         self.last_update = update
         self.old_update_list = local_update_list

@@ -117,16 +117,20 @@ def detection(score, clients_state, flags, steps=1):
 
     metrics = {}
     
-    if steps == 1:
-        real_label=convert_clients_state_to_array(clients_state)
+    real_label=convert_clients_state_to_array(clients_state)
+    dp_label = convert_clients_state_to_array(flags)
+    
+    final_label = np.logical_and(real_label, dp_label).astype(int)
 
-        accuracy = accuracy_score(real_label, label_pred)
-        recall = recall_score(real_label, label_pred)
-        f1 = f1_score(real_label, label_pred)
-        precision = precision_score(real_label, label_pred)
-        cnfs_matrix = confusion_matrix(real_label, label_pred) # confusion_matrix(y_true, y_pred).ravel()
+    if steps == 1:
+
+        accuracy = accuracy_score(final_label, label_pred)
+        recall = recall_score(final_label, label_pred)
+        f1 = f1_score(final_label, label_pred)
+        precision = precision_score(final_label, label_pred)
+        cnfs_matrix = confusion_matrix(final_label, label_pred) # confusion_matrix(y_true, y_pred).ravel()
         
-        log(DEBUG, "final label: %s", real_label)
+        log(DEBUG, "final label: %s", final_label)
         log(DEBUG, "final label pred: %s", label_pred)
 
         metrics["accuracy"] = accuracy
@@ -158,10 +162,6 @@ def detection(score, clients_state, flags, steps=1):
         final_label_pred = np.copy(label_pred)
         final_label_pred[data_pois_indexes] = second_label_pred
 
-        real_label=convert_clients_state_to_array(clients_state)
-        dp_label = convert_clients_state_to_array(flags)
-        
-        final_label = np.logical_and(real_label, dp_label).astype(int)
         log(DEBUG, "final label: %s", final_label)
         log(DEBUG, "final label pred: %s", final_label_pred)
 
@@ -183,7 +183,6 @@ def detection(score, clients_state, flags, steps=1):
         log(DEBUG, "Recall: %s", recall)
         log(DEBUG, "F1: %s", f1)
         log(DEBUG, "Precision: %s", precision)
-
 
         return final_label_pred, metrics
 
@@ -227,4 +226,4 @@ def detection1(score):
         return 0
     else:
         log(WARNING, 'Attack Detected!')
-        return 1
+        return 1, select_k

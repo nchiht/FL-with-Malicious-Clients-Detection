@@ -17,3 +17,7 @@
 `pip install -r requirements.txt`
 
 - Riskware: 541 fails
+
+study case 1:
+
+`python main.py -wr 5 -nm 10 -nd 5 -r 50 -n 50`
