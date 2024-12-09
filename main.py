@@ -57,18 +57,20 @@ def server_fn(context: Context) -> ServerAppComponents:
     """
 
     # Configure the server for 5 rounds of training
-    config = ServerConfig(num_rounds=15)
+    config = ServerConfig(num_rounds=NUM_ROUNDS)
 
     return ServerAppComponents(
         # strategy=strategy, 
         config=config, 
         server=EnhancedServer(
             strategy=strategy, 
-            attack_fn=gaussian_attack, 
-            magnitude=1, 
-            num_malicious=10, 
-            num_data_poisoning=7, 
-            window_size=5
+            attack_fn=attck_fnc[attack], 
+            magnitude=magnitude, 
+            num_malicious=num_model_poisoning, 
+            num_data_poisoning=num_data_poisoning, 
+            window_size=window_size,
+            warmup_rounds=warmup_rounds,
+            steps=2
         )
     )
 
@@ -89,8 +91,14 @@ def client_fn(context: Context) -> Client:
     # Create a single Flower client representing a single organization
     # FlowerClient is a subclass of NumPyClient, so we need to call .to_client()
     # to convert it to a subclass of `flwr.client.Client`
-    return FlowerClient(partition_id, node_id, net, trainloader, valloader, device=device,
-                         epochs=10, datapoison_ratio=0.5, target=True).to_client()
+    return FlowerClient(
+        partition_id, 
+        node_id, net, trainloader, valloader, 
+        device=device,
+        epochs=epochs, 
+        datapoison_ratio=datapoison_ratio, 
+        target=target
+    ).to_client()
 
 
 if __name__ == '__main__':
@@ -99,6 +107,20 @@ if __name__ == '__main__':
     parser.add_argument("-d", "--dataset", default="cifar10", type=str, help="Indicate dataset for the simulation")
     parser.add_argument("-n", "--num_clients", default=10, type=int, help="Indicate number of clients for the simulation")
     parser.add_argument("-b", "--batch_size", default=32, type=int, help="Indicate batch size for data partition")
+    # Server configuration
+    parser.add_argument("-r", "--rounds", default=10, type=int, help="Indicate number of rounds for the simulation")
+    parser.add_argument("-a", "--attack", default="gaussian_attack", type=str, help="Indicate attack type for the simulation")
+    parser.add_argument("-mag", "--magnitude", default=1, type=float, help="Indicate magnitude of the attack")
+    parser.add_argument("-nm", "--num_model_poisoning", default=3, type=int, help="Indicate number of model poisoning")
+    parser.add_argument("-nd", "--num_data_poisoning", default=2, type=int, help="Indicate number of data poisoning")
+    parser.add_argument("-wr", "--warmup_rounds", default=1, type=int, help="Indicate number of warmup rounds")
+    # Defense configuration
+    parser.add_argument("--window_size", default=5, type=int, help="Indicate window size for the attack")
+    # Client configuration
+    parser.add_argument("-e", "--epochs", default=10, type=int, help="Indicate number of epochs for training") 
+    parser.add_argument("-rat", "--datapoison_ratio", default=0.5, type=float, help="Indicate ratio of data poisoning")
+    parser.add_argument("-t", "--target", default=True, type=bool, help="Indicate target or untargeted attack")
+    
     parser.add_argument("--device", default="cpu", type=str, help="Select device type for the process")
     args = parser.parse_args()
     run_config = vars(args)
@@ -106,12 +128,25 @@ if __name__ == '__main__':
     dataset_id = run_config["dataset"]
     NUM_CLIENTS = run_config["num_clients"]
     BATCH_SIZE = run_config["batch_size"]
+    NUM_ROUNDS = run_config["rounds"]
+    attack = run_config["attack"]
+    magnitude = run_config["magnitude"]
+    num_model_poisoning = run_config["num_model_poisoning"]
+    num_data_poisoning = run_config["num_data_poisoning"]
+    warmup_rounds = run_config["warmup_rounds"]
+    window_size = run_config["window_size"]
+    epochs = run_config["epochs"]
+    datapoison_ratio = run_config["datapoison_ratio"]
+    target = run_config["target"]
     device = torch.device(run_config["device"])
 
     # Specify the resources each of your clients need
     # By default, each client will be allocated 1x CPU and 0x GPUs
     backend_config = {"client_resources": {"num_cpus": 1, "num_gpus": 0.0}}
-
+    attck_fnc = {
+        'gaussian_attack': gaussian_attack,
+        'no_attack': no_attack
+    }
     # When running on GPU, assign an entire GPU for each client
     if device.type == "cuda":
         backend_config = {"client_resources": {"num_cpus": 1, "num_gpus": 1.0}}
