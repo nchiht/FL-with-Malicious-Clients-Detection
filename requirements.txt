@@ -20,4 +20,4 @@ matplotlib
 ray==2.10.0
 dotenv==1.0.1
 argparse==1.4.0
-scipy
+

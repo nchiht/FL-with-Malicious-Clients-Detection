@@ -180,7 +180,7 @@ if __name__ == '__main__':
     #     min_evaluate_clients = 5,
     #     min_available_clients = 10,
     #     num_malicious_clients = 5,
-    #     num_clients_to_keep = 20,
+    #     num_clients_to_keep = 30,
     #     evaluate_fn = evaluate_fn,
     #     initial_parameters = ndarrays_to_parameters(get_parameters(model_with_dataset[dataset_id][0])),
     # )
