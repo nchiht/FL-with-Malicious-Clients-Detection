@@ -5,7 +5,8 @@ import torchvision.transforms as transforms
 from torch.utils.data import DataLoader
     
 from flwr_datasets import FederatedDataset
-
+from flwr.common.logger import log
+from logging import INFO, DEBUG, WARNING
 
 class cifar10_Net(nn.Module):
     def __init__(self) -> None:
@@ -29,7 +30,15 @@ class cifar10_Net(nn.Module):
 def load_datasets(partition_id: int, NUM_CLIENTS: int, BATCH_SIZE: int):
 # def load_datasets(partition_id: int):
     fds = FederatedDataset(dataset="cifar10", partitioners={"train": NUM_CLIENTS})
-    partition = fds.load_partition(partition_id)
+
+    for _ in range(2):  # Try twice
+        try:
+            partition = fds.load_partition(partition_id)
+            break
+        except Exception as e:
+            log(WARNING, f"Error loading partition: {e}. Retrying...")
+    else:
+        raise RuntimeError("Failed to load partition after 2 attempts")
     # Divide data on each node: 80% train, 20% test
     partition_train_test = partition.train_test_split(test_size=0.2, seed=42)
     pytorch_transforms = transforms.Compose(

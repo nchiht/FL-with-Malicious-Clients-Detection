@@ -37,18 +37,19 @@ class Hist(History):
     def __init__(self):
         super().__init__()
         self.confusion_matrix = {"TP": 0, "TN": 0, "FP": 0, "FN": 0}
-    def to_dataframes(self):
+
+    def to_dataframes(self, file_path: str):
         """Convert losses and metrics to pandas DataFrames."""
         # Convert losses_centralized to DataFrame
         df_losses_centralized = pd.DataFrame(self.losses_centralized, columns=["round", "loss"])
-        df_losses_centralized.to_csv("data/metrics/losses_centralized.csv", index=False)
+        df_losses_centralized.to_csv(file_path + "/losses_centralized.csv", index=False)
         # Convert metrics_centralized to DataFrame
         metrics_data = []
         for key, values in self.metrics_centralized.items():
             for round, value in values:
                 metrics_data.append({"round": round, "accuracy": value})
         df_metrics_centralized = pd.DataFrame(metrics_data)
-        df_metrics_centralized.to_csv("data/metrics/metrics_centralized.csv", index=False)
+        df_metrics_centralized.to_csv(file_path + "/metrics_centralized.csv", index=False)
         log(INFO, "DataFrames saved")
         return df_losses_centralized, df_metrics_centralized
     
@@ -66,7 +67,7 @@ class EnhancedServer(Server):
             attack_fn: Callable,
             magnitude: float = 0.0,
             num_data_poisoning: int = 2,
-            steps: int = 1
+            defense: bool = True,
         ) -> None:
 
         super().__init__(
@@ -87,7 +88,7 @@ class EnhancedServer(Server):
         self.num_data_poisoning = num_data_poisoning
         self.list_data_poisoning = []
         self.flags_data_poisoning = {}
-        self.steps = steps
+        self.defense = defense
 
         # initialize storing variables
         self.old_update_list = []
@@ -239,10 +240,14 @@ class EnhancedServer(Server):
             self.metrics_detection_df,
             columns=["server_round", "accuracy", "recall", "f1_score", "precision", "confusion_matrix"]
         )
-        detection_df.to_csv("data/metrics/detection_metrics.csv", index=False)
+        base_path = f"data/metrics/run_{timeit.default_timer()}"
+        if (os.path.exists(base_path) == False):
+            os.makedirs(base_path)
+
+        detection_df.to_csv(base_path + "/detection_metrics.csv", index=False)
         log(INFO, "Detection metrics saved")
 
-        history.to_dataframes()
+        history.to_dataframes(file_path=base_path)
 
         return history, elapsed
 
@@ -397,7 +402,7 @@ class EnhancedServer(Server):
         local_update_list = [local for _, local in gradient_updates.items()]
          
         # Detect malicious clients using FLDetector
-        if server_round > self.window_size + 1:
+        if (server_round > self.window_size + 1) and (self.defense):
             # self.sampling = 0
             log(DEBUG, "Starting to detect malicious clients")
 
