@@ -31,7 +31,7 @@ import torch
 import numpy as np
 import timeit
 import pandas as pd
-
+import datetime 
 
 class Hist(History):
     def __init__(self):
@@ -240,7 +240,7 @@ class EnhancedServer(Server):
             self.metrics_detection_df,
             columns=["server_round", "accuracy", "recall", "f1_score", "precision", "confusion_matrix"]
         )
-        base_path = f"data/metrics/run_{timeit.default_timer()}"
+        base_path = f"data/metrics/run_{datetime.datetime.now().strftime('%Y-%m-%d_%H-%M-%S')}"
         if (os.path.exists(base_path) == False):
             os.makedirs(base_path)
 

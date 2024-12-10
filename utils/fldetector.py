@@ -223,7 +223,7 @@ def detection1(score):
     log(DEBUG, "select_k: %s", select_k)
     if select_k == 1:
         log(WARNING, 'No attack detected!')
-        return 0
+        return 0, select_k
     else:
         log(WARNING, 'Attack Detected!')
         return 1, select_k
