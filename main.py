@@ -116,7 +116,7 @@ if __name__ == '__main__':
     parser.add_argument("-wr", "--warmup_rounds", default=1, type=int, help="Indicate number of warmup rounds")
     # Defense configuration
     parser.add_argument("--window_size", default=5, type=int, help="Indicate window size for the attack")
-    parser.add_argument("-def","--defense", default=True, type=bool, help="Indicate defense mechanism for the attack")
+    parser.add_argument("--no-defense", action="store_false", dest="defense", help="Indicate defense mechanism for the attack")
     # Client configuration
     parser.add_argument("-e", "--epochs", default=10, type=int, help="Indicate number of epochs for training") 
     parser.add_argument("-rat", "--datapoison_ratio", default=0.5, type=float, help="Indicate ratio of data poisoning")

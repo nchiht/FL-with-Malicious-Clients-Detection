@@ -31,7 +31,7 @@ BATCH_SIZE = 32
 def train(net, trainloader, epochs: int, verbose=False, device="cpu"):
     """Train the network on the training set."""
     criterion = torch.nn.CrossEntropyLoss()
-    optimizer = torch.optim.Adam(net.parameters())
+    optimizer = torch.optim.Adam(net.parameters(), lr=0.001)
     net.train()
     local_grad = []
     for epoch in range(epochs):
