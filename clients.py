@@ -28,10 +28,10 @@ different train, test, load_datasets function
 # NUM_CLIENTS = 10
 BATCH_SIZE = 32
 
-def train(net, trainloader, epochs: int, verbose=False, device="cpu"):
+def train(net, trainloader, epochs: int, verbose=False, device="cpu", learning_rate=0.001):
     """Train the network on the training set."""
     criterion = torch.nn.CrossEntropyLoss()
-    optimizer = torch.optim.Adam(net.parameters(), lr=0.001)
+    optimizer = torch.optim.Adam(net.parameters(), lr=learning_rate)
     net.train()
     local_grad = []
     for epoch in range(epochs):
@@ -223,7 +223,9 @@ class FlowerClient(NumPyClient):
             log(INFO, "Client %s: Poisoned data", self.partition_id) 
         else:
             trainloader = self.trainloader
-        train(self.net, trainloader, epochs=self.epochs, device=self.device)
+        # if config["partition_id"] in [0,1]:
+        #     print("learning_rate", config["learning_rate"])
+        train(self.net, trainloader, epochs=self.epochs, device=self.device, learning_rate=config["learning_rate"])
         return get_parameters(self.net), len(self.trainloader), {"node_id": self.node_id, "partition_id": self.partition_id}
 
     def evaluate(self, parameters, config):

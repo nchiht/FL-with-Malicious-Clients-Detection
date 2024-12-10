@@ -113,8 +113,11 @@ class EnhancedStrategy(FedAvg):
         config = {
             "server_round": server_round,
             "warmup_rounds": warmup_rounds,
-            "dp_flags": False
+            "dp_flags": False,
+            "learning_rate": 0.001
             }
+        if server_round >= 30:
+            config["learning_rate"] = 0.003
         if self.on_fit_config_fn is not None:
             # Custom fit config function provided
             config = self.on_fit_config_fn(server_round)
