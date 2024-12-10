@@ -66,7 +66,7 @@ class EnhancedServer(Server):
             attack_fn: Callable,
             magnitude: float = 0.0,
             num_data_poisoning: int = 2,
-            steps: int = 1
+            defense: bool = True,
         ) -> None:
 
         super().__init__(
@@ -87,7 +87,7 @@ class EnhancedServer(Server):
         self.num_data_poisoning = num_data_poisoning
         self.list_data_poisoning = []
         self.flags_data_poisoning = {}
-        self.steps = steps
+        self.defense = defense
 
         # initialize storing variables
         self.old_update_list = []
@@ -397,7 +397,7 @@ class EnhancedServer(Server):
         local_update_list = [local for _, local in gradient_updates.items()]
          
         # Detect malicious clients using FLDetector
-        if server_round > self.window_size + 1:
+        if server_round > self.window_size + 1 and self.defense:
             # self.sampling = 0
             log(DEBUG, "Starting to detect malicious clients")
 
