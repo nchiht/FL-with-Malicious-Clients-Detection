@@ -8,6 +8,7 @@ data/apk_images/
 # data/Malware/
 data/clients_params/
 data/metrics/
+data/plots/
 
 __pycache__/
 

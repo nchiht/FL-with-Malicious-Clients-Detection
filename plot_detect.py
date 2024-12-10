@@ -16,6 +16,12 @@ print(f"Average Accuracy: {average_accuracy}")
 print(f"Average Recall: {average_recall}")
 print(f"Average Precision: {average_precision}")
 print(f"Average F1 Score: {average_f1_score}")
+averages = pd.DataFrame({
+    'Metric': ['Accuracy', 'Recall', 'Precision', 'F1 Score'],
+    'Average': [average_accuracy, average_recall, average_precision, average_f1_score]
+})
+
+averages.to_csv("data\plots\Average_metrics.csv", index=False)
 
 # Lấy confusion matrix từ file CSV
 # Chuyển đổi chuỗi thành mảng numpy
@@ -49,4 +55,6 @@ ax.set_yticklabels(['', 'Malicious', 'Benign'])
 
 plt.xlabel('Predicted')
 plt.ylabel('True')
+# Lưu kết quả ra file
+plt.savefig("data\plots\confusion_matrix_detection_plot.png")
 plt.show()

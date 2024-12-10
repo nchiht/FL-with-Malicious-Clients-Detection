@@ -17,5 +17,6 @@ plt.xlabel('Round')
 plt.ylabel('Value')
 plt.legend()
 plt.grid(True)
-
+# Lưu kết quả ra file
+plt.savefig("data\plots\loss_accuracy_plot.png")
 plt.show()
