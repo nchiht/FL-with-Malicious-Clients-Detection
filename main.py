@@ -122,7 +122,7 @@ if __name__ == '__main__':
     # Client configuration
     parser.add_argument("-e", "--epochs", default=10, type=int, help="Indicate number of epochs for training") 
     parser.add_argument("-rat", "--datapoison_ratio", default=0.5, type=float, help="Indicate ratio of data poisoning")
-    parser.add_argument("-t", "--target", default=True, type=bool, help="Indicate target or untargeted attack")
+    parser.add_argument("-t", "--target", action="store_false", dest="target", help="Indicate target or untargeted attack")
     
     parser.add_argument("--device", default="cpu", type=str, help="Select device type for the process")
     args = parser.parse_args()
