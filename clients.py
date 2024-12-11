@@ -277,8 +277,8 @@ class FlowerClient(NumPyClient):
             log(INFO, "Client %s: Poisoned data", self.partition_id) 
         else:
             trainloader = self.trainloader
-        # if config["partition_id"] in [0,1]:
-        #     print("learning_rate", config["learning_rate"])
+
+        # print("learning_rate", config["learning_rate"])
         train(self.net, trainloader, epochs=self.epochs, device=self.device, learning_rate=config["learning_rate"])
         return get_parameters(self.net), len(self.trainloader), {"node_id": self.node_id, "partition_id": self.partition_id}
 

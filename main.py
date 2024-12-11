@@ -16,7 +16,7 @@ from clients import get_parameters, set_parameters, test
 from utils import evaluation
 from utils.models import cifar10, mnist
 from attacks import no_attack, gaussian_attack 
-from strategy import EnhancedStrategy
+from strategy import EnhancedStrategy, CustomStrategy_FedAvg
 
 import torch
 import argparse
@@ -114,9 +114,11 @@ if __name__ == '__main__':
     parser.add_argument("-nm", "--num_model_poisoning", default=3, type=int, help="Indicate number of model poisoning")
     parser.add_argument("-nd", "--num_data_poisoning", default=2, type=int, help="Indicate number of data poisoning")
     parser.add_argument("-wr", "--warmup_rounds", default=1, type=int, help="Indicate number of warmup rounds")
+    parser.add_argument("-str", "--strategy", default="our", type=str, help="Indicate strategy for the simulation")
     # Defense configuration
     parser.add_argument("--window_size", default=5, type=int, help="Indicate window size for the attack")
     parser.add_argument("--no-defense", action="store_false", dest="defense", help="Indicate defense mechanism for the attack")
+    parser.add_argument("--num_client_to_keep", default=30, type=int, help="Indicate number of clients to keep for the attack")
     # Client configuration
     parser.add_argument("-e", "--epochs", default=10, type=int, help="Indicate number of epochs for training") 
     parser.add_argument("-rat", "--datapoison_ratio", default=0.5, type=float, help="Indicate ratio of data poisoning")
@@ -136,6 +138,8 @@ if __name__ == '__main__':
     num_data_poisoning = run_config["num_data_poisoning"]
     warmup_rounds = run_config["warmup_rounds"]
     window_size = run_config["window_size"]
+    strategy_type = run_config["strategy"]
+    num_client_to_keep = run_config["num_client_to_keep"]   
     epochs = run_config["epochs"]
     datapoison_ratio = run_config["datapoison_ratio"]
     target = run_config["target"]
@@ -186,19 +190,29 @@ if __name__ == '__main__':
     #     evaluate_fn = evaluate_fn,
     #     initial_parameters = ndarrays_to_parameters(get_parameters(model_with_dataset[dataset_id][0])),
     # )
+    if strategy_type == "our" or strategy_type == "krum":
+        strategy = EnhancedStrategy(
+            fraction_fit = 1,
+            fraction_evaluate = 0.5,
+            min_fit_clients = 10,
+            min_evaluate_clients = 5,
+            min_available_clients = 10,
+            num_malicious_clients = 10,
+            num_clients_to_keep = num_client_to_keep,
+            evaluate_fn = evaluate_fn,
+            initial_parameters = ndarrays_to_parameters(get_parameters(model_with_dataset[dataset_id][0]))
+        )
+    elif strategy_type == "fedavg":
+        strategy = CustomStrategy_FedAvg(
+            fraction_fit = 1,
+            fraction_evaluate = 0.5,
+            min_fit_clients = 10,
+            min_evaluate_clients = 5,
+            min_available_clients = 10,
+            evaluate_fn = evaluate_fn,
+            initial_parameters = ndarrays_to_parameters(get_parameters(model_with_dataset[dataset_id][0]))
+        )
 
-    strategy = EnhancedStrategy(
-        fraction_fit = 1,
-        fraction_evaluate = 0.5,
-        min_fit_clients = 10,
-        min_evaluate_clients = 5,
-        min_available_clients = 10,
-        num_malicious_clients = 10,
-        num_clients_to_keep = 30,
-        evaluate_fn = evaluate_fn,
-        initial_parameters = ndarrays_to_parameters(get_parameters(model_with_dataset[dataset_id][0]))
-    )
-    
 
     # Create the ClientApp
     client = ClientApp(client_fn=client_fn)
@@ -216,12 +230,4 @@ if __name__ == '__main__':
         backend_config=backend_config,
         verbose_logging=True
     )
-    # history = start_simulation(
-    #     client_fn=client_fn,
-    #     num_clients=NUM_CLIENTS,
-    #     # client_resources=cfg.client_resources, # TODO: Add again when we manually set the resources
-    #     #ray_init_args={"num_cpus": 1, "num_gpus": 16},
-    #     server=EnhancedServer(strategy=strategy),
-    #     # config=flwr.server.ServerConfig(num_rounds=cfg.server.num_rounds),
-    #     strategy=strategy,
-    # )
+   
