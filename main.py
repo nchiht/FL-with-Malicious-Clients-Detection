@@ -14,7 +14,8 @@ from server import EnhancedServer
 from clients import FlowerClient
 from clients import get_parameters, set_parameters, test
 from utils import evaluation
-from utils.models import cifar10, mnist
+from utils.models import cifar10, mnist, CIC
+from utils.models.CIC import load_dataset_CIC
 from attacks import no_attack, gaussian_attack 
 from strategy import EnhancedStrategy, CustomStrategy_FedAvg
 
@@ -40,8 +41,11 @@ def evaluate_fn(
     model = model_with_dataset[dataset_id][0]
     set_parameters(model, parameters)
     model.to(device)
-
-    _,_, testset = model_with_dataset[dataset_id][1](partition_id=random.randint(1, 5), NUM_CLIENTS=NUM_CLIENTS, BATCH_SIZE=BATCH_SIZE)
+    if dataset_id in ["cifar10", "mnist"]:
+        _,_, testset = model_with_dataset[dataset_id][1](partition_id=random.randint(1, 5), NUM_CLIENTS=NUM_CLIENTS, BATCH_SIZE=BATCH_SIZE)
+    elif dataset_id == "CIC":
+        testset = TESTLOADER
+        print("Testset: ", len(testset.dataset))
     # testloader = DataLoader(testset, batch_size=BATCH_SIZE)
     loss, accuracy = test(model, testset, device=device)
     log(INFO, f"Server-side evaluation loss {loss} / accuracy {accuracy}")
@@ -80,26 +84,46 @@ def client_fn(context: Context) -> Client:
 
     # Load model
     net = model_with_dataset[dataset_id][0].to(device)
-
-    # Load data (CIFAR-10)
-    # Note: each client gets a different trainloader/valloader, so each client
-    # will train and evaluate on their own unique data partition
-    # Read the node_config to fetch data partition associated to this node
-    partition_id = context.node_config["partition-id"]
-    trainloader, valloader, _ = model_with_dataset[dataset_id][1](partition_id=partition_id, NUM_CLIENTS=NUM_CLIENTS, BATCH_SIZE=BATCH_SIZE)
-    node_id = context.node_id
-    # Create a single Flower client representing a single organization
-    # FlowerClient is a subclass of NumPyClient, so we need to call .to_client()
-    # to convert it to a subclass of `flwr.client.Client`
-    return FlowerClient(
-        partition_id, 
-        node_id, net, trainloader, valloader, 
-        device=device,
-        epochs=epochs, 
-        datapoison_ratio=datapoison_ratio, 
-        target=target
-    ).to_client()
-
+    if dataset_id in ["cifar10", "mnist"]:
+        print("hi")
+        # Load data (CIFAR-10)
+        # Note: each client gets a different trainloader/valloader, so each client
+        # will train and evaluate on their own unique data partition
+        # Read the node_config to fetch data partition associated to this node
+        partition_id = context.node_config["partition-id"]
+        trainloader, valloader, _ = model_with_dataset[dataset_id][1](partition_id=partition_id, NUM_CLIENTS=NUM_CLIENTS, BATCH_SIZE=BATCH_SIZE)
+        node_id = context.node_id
+        # Create a single Flower client representing a single organization
+        # FlowerClient is a subclass of NumPyClient, so we need to call .to_client()
+        # to convert it to a subclass of `flwr.client.Client`
+        return FlowerClient(
+            partition_id, 
+            node_id, net, trainloader, valloader, 
+            device=device,
+            epochs=epochs, 
+            datapoison_ratio=datapoison_ratio, 
+            target=target
+        ).to_client()
+    elif dataset_id == "CIC":
+        print("hello")
+        # Load data (CIC)
+        partition_id = context.node_config["partition-id"]
+        # trainloader, valloader = model_with_dataset[dataset_id][1](partition_id=partition_id, num_partitions=NUM_CLIENTS)
+        trainloader = TRAINLOADERS[partition_id]
+        valloader = VALLOADERS[partition_id]
+        print("Trainloader: ", len(trainloader.dataset))
+        node_id = context.node_id
+        print("Net: ", net._get_name())
+        return FlowerClient(
+            partition_id, 
+            node_id, net, trainloader, valloader, 
+            device=device,
+            epochs=epochs, 
+            datapoison_ratio=datapoison_ratio, 
+            target=target
+        ).to_client()
+    else:
+        raise ValueError("Unknown dataset")
 
 if __name__ == '__main__':
     # main()
@@ -145,7 +169,10 @@ if __name__ == '__main__':
     target = run_config["target"]
     defense = run_config["defense"]
     device = torch.device(run_config["device"])
-
+    TRAINLOADERS, VALLOADERS, TESTLOADER = load_dataset_CIC(NUM_CLIENTS, BATCH_SIZE) 
+    print("Trainloaders: ", len(TRAINLOADERS))
+    print("Trainloaders: ", len(TRAINLOADERS[0].dataset))
+    
     # Specify the resources each of your clients need
     # By default, each client will be allocated 1x CPU and 0x GPUs
     backend_config = {"client_resources": {"num_cpus": 1, "num_gpus": 0.0}}
@@ -165,7 +192,8 @@ if __name__ == '__main__':
 
     model_with_dataset = {
         "cifar10": [cifar10.cifar10_Net(), cifar10.load_datasets],
-        "mnist": [mnist.mnist_Net(), mnist.load_datasets]
+        "mnist": [mnist.mnist_Net(), mnist.load_datasets],
+        "CIC": [CIC.MyModel(),"CIC"]
         # TODO: add mnist
     }
 
@@ -222,6 +250,7 @@ if __name__ == '__main__':
 
 
     log(INFO, f"Federated learning for {dataset_id}")
+    log(INFO, "model: %s", model_with_dataset[dataset_id][0]._get_name())
     # Run simulation
     run_simulation(
         server_app=server,

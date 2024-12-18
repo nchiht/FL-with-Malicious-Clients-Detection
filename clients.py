@@ -36,12 +36,17 @@ def train(net, trainloader, epochs: int, verbose=False, device="cpu", learning_r
     local_grad = []
     for epoch in range(epochs):
         correct, total, epoch_loss = 0, 0, 0.0
+        # if net._get_name() in ["cifar10_Net", "mnist_Net"]:
+        
         for batch in trainloader:
-
+            
             if(net._get_name() == "cifar10_Net"): # TODO: depends on models
                 images, labels = batch["img"].to(device), batch["label"].to(device)
             if(net._get_name() == "mnist_Net"):
                 images, labels = batch["image"].to(device), batch["label"].to(device)
+            if(net._get_name() == "MyModel"):
+                images, labels = batch["data"].to(device), batch["label"].to(device)
+                log(INFO, "begin training: %s", images.shape)
             optimizer.zero_grad()
             outputs = net(images)
             loss = criterion(outputs, labels)
@@ -60,11 +65,31 @@ def train(net, trainloader, epochs: int, verbose=False, device="cpu", learning_r
             epoch_loss += loss
             total += labels.size(0)
             correct += (torch.max(outputs.data, 1)[1] == labels).sum().item()
+        
         epoch_loss /= len(trainloader.dataset)
-        epoch_acc = correct / total
+        epoch_acc = correct / total    
+        # elif net._get_name() == "MyModel":
+        #     for inputs, labels in trainloader:
+        #         inputs, labels = inputs.to(device), labels.to(device)
+
+        #         optimizer.zero_grad()
+        #         outputs = net(inputs)
+        #         loss = criterion(outputs, labels)
+        #         loss.backward()
+        #         optimizer.step()
+                
+        #         # Metrics
+        #         epoch_loss += loss
+        #         _, predicted = torch.max(outputs.data, 1)
+        #         total += labels.size(0)
+        #         correct += (predicted == labels).sum().item()
+
+        #     # Training accuracy
+        #     epoch_acc = correct / total
         if verbose:
             print(f"Epoch {epoch+1}: train loss {epoch_loss}, accuracy {epoch_acc}")
     # log(INFO, "Local Grad: %s", local_grad)
+    log(INFO, "End training")
     return local_grad
 
 def test(net, testloader, device="cpu"):
@@ -73,18 +98,29 @@ def test(net, testloader, device="cpu"):
     correct, total, loss = 0, 0, 0.0
     net.eval()
     with torch.no_grad():
+        # if net._get_name() in ["cifar10_Net", "mnist_Net"]:
         for batch in testloader:
 
             if(net._get_name() == "cifar10_Net"): # TODO: depends on models
                 images, labels = batch["img"].to(device), batch["label"].to(device)
             if(net._get_name() == "mnist_Net"):
                 images, labels = batch["image"].to(device), batch["label"].to(device)
-
+            if(net._get_name() == "MyModel"):
+                images, labels = batch["data"].to(device), batch["label"].to(device)
             outputs = net(images)
             loss += criterion(outputs, labels).item()
             _, predicted = torch.max(outputs.data, 1)
             total += labels.size(0)
             correct += (predicted == labels).sum().item()
+        # elif net._get_name() == "MyModel":
+        #     for inputs, labels in testloader:
+        #         inputs, labels = inputs.to(device), labels.to(device)
+
+        #         outputs = net(inputs)
+        #         loss += criterion(outputs, labels).item()
+        #         _, predicted = torch.max(outputs.data, 1)
+        #         total += labels.size(0)
+        #         correct += (predicted == labels).sum().item()
     loss /= len(testloader.dataset)
     accuracy = correct / total
     return loss, accuracy
@@ -93,6 +129,7 @@ def set_parameters(net, parameters: List[np.ndarray]):
     params_dict = zip(net.state_dict().keys(), parameters)
     state_dict = OrderedDict({k: torch.Tensor(v) for k, v in params_dict})
     net.load_state_dict(state_dict, strict=True)
+    print("Setted parameters")
 
 def get_parameters(net) -> List[np.ndarray]:
     return [val.cpu().numpy() for _, val in net.state_dict().items()]
@@ -254,6 +291,7 @@ class FlowerClient(NumPyClient):
         return get_parameters(self.net)
 
     def fit(self, parameters, config):
+        log(INFO, "1: Client %s: Normal data, data: %s", self.node_id, self.net._get_name())
         set_parameters(self.net, parameters)
         self.partition_id = config["index"]
         # log(INFO, "dp flag client %s: %s", self.partition_id, config["dp_flags"])
@@ -277,9 +315,11 @@ class FlowerClient(NumPyClient):
             log(INFO, "Client %s: Poisoned data", self.partition_id) 
         else:
             trainloader = self.trainloader
-
+            log(INFO, "loaded trainloader")
+        log(INFO, "2: Client %s: Normal data, data: %s", self.node_id, self.net._get_name())
         # print("learning_rate", config["learning_rate"])
         train(self.net, trainloader, epochs=self.epochs, device=self.device, learning_rate=config["learning_rate"])
+        log(INFO, "3: Client %s: Normal data, data: %s", self.node_id, self.net._get_name())
         return get_parameters(self.net), len(self.trainloader), {"node_id": self.node_id, "partition_id": self.partition_id}
 
     def evaluate(self, parameters, config):

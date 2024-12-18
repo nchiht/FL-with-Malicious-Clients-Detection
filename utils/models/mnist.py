@@ -58,6 +58,7 @@ def load_datasets(partition_id: int, NUM_CLIENTS: int, BATCH_SIZE: int):
     valloader = DataLoader(partition_train_test["test"], batch_size=BATCH_SIZE)
     testset = fds.load_split("test").with_transform(apply_transforms)
     testloader = DataLoader(testset, batch_size=BATCH_SIZE)
+    print("Data MNIST loaded")
     return trainloader, valloader, testloader
 
 
