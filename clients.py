@@ -254,6 +254,7 @@ class FlowerClient(NumPyClient):
         return get_parameters(self.net)
 
     def fit(self, parameters, config):
+        print("Client: ", self.partition_id)
         set_parameters(self.net, parameters)
         self.partition_id = config["index"]
         # log(INFO, "dp flag client %s: %s", self.partition_id, config["dp_flags"])
@@ -280,6 +281,7 @@ class FlowerClient(NumPyClient):
 
         # print("learning_rate", config["learning_rate"])
         train(self.net, trainloader, epochs=self.epochs, device=self.device, learning_rate=config["learning_rate"])
+        print("Finish fit ", self.partition_id)
         return get_parameters(self.net), len(self.trainloader), {"node_id": self.node_id, "partition_id": self.partition_id}
 
     def evaluate(self, parameters, config):

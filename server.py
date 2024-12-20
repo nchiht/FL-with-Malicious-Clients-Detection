@@ -281,7 +281,7 @@ class EnhancedServer(Server):
         # Collect `fit` results from all clients participating in this round
         results, failures = fit_clients(
             client_instructions=client_instructions,
-            max_workers=self.max_workers,
+            max_workers= 2, #self.max_workers,
             timeout=timeout,
             group_id=server_round
         )

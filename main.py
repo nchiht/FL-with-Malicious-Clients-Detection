@@ -41,7 +41,8 @@ def evaluate_fn(
     set_parameters(model, parameters)
     model.to(device)
 
-    _,_, testset = model_with_dataset[dataset_id][1](partition_id=random.randint(1, 5), NUM_CLIENTS=NUM_CLIENTS, BATCH_SIZE=BATCH_SIZE)
+    _,_, testset = model_with_dataset[dataset_id][1](partition_id=random.randint(1, 2), NUM_CLIENTS=NUM_CLIENTS, BATCH_SIZE=BATCH_SIZE)
+    print("Testset (testloader): ", len(testset.dataset))
     # testloader = DataLoader(testset, batch_size=BATCH_SIZE)
     loss, accuracy = test(model, testset, device=device)
     log(INFO, f"Server-side evaluation loss {loss} / accuracy {accuracy}")
@@ -91,6 +92,9 @@ def client_fn(context: Context) -> Client:
     # Create a single Flower client representing a single organization
     # FlowerClient is a subclass of NumPyClient, so we need to call .to_client()
     # to convert it to a subclass of `flwr.client.Client`
+    print("PartitionID: ", partition_id)
+    print("Trainloader: ", len(trainloader.dataset))
+    print("Valloader: ", len(valloader.dataset))
     return FlowerClient(
         partition_id, 
         node_id, net, trainloader, valloader, 
@@ -122,7 +126,7 @@ if __name__ == '__main__':
     # Client configuration
     parser.add_argument("-e", "--epochs", default=10, type=int, help="Indicate number of epochs for training") 
     parser.add_argument("-rat", "--datapoison_ratio", default=0.5, type=float, help="Indicate ratio of data poisoning")
-    parser.add_argument("-t", "--target", default=True, type=bool, help="Indicate target or untargeted attack")
+    parser.add_argument("-t", "--target", action="store_false", dest="target", help="Indicate target or untargeted attack")
     
     parser.add_argument("--device", default="cpu", type=str, help="Select device type for the process")
     args = parser.parse_args()
@@ -193,14 +197,20 @@ if __name__ == '__main__':
     if strategy_type == "our" or strategy_type == "krum":
         strategy = EnhancedStrategy(
             fraction_fit = 1,
-            fraction_evaluate = 0.5,
-            min_fit_clients = 10,
-            min_evaluate_clients = 5,
-            min_available_clients = 10,
-            num_malicious_clients = 10,
+            fraction_evaluate = 1,
+            min_fit_clients = 4,
+            min_evaluate_clients = 4,
+            min_available_clients = 4,
+            num_malicious_clients = 1,
             num_clients_to_keep = num_client_to_keep,
             evaluate_fn = evaluate_fn,
             initial_parameters = ndarrays_to_parameters(get_parameters(model_with_dataset[dataset_id][0]))
+            # fraction_fit = 1,
+            # fraction_evaluate = 0.5,
+            # min_fit_clients = 10,
+            # min_evaluate_clients = 5,
+            # min_available_clients = 10,
+            # num_malicious_clients = 10,
         )
     elif strategy_type == "fedavg":
         strategy = CustomStrategy_FedAvg(
