@@ -144,7 +144,7 @@ class EnhancedServer(Server):
                 self.clients_state[idx] = True
             if idx in self.list_data_poisoning:
                 self.flags_data_poisoning[idx] = True
-        log(INFO, "Num available clients: %s", self._client_manager.num_available())
+
         # Sort clients states
         self.clients_state = {k: self.clients_state[k] for k in sorted(self.clients_state)}
         self.flags_data_poisoning = {k: self.flags_data_poisoning[k] for k in sorted(self.flags_data_poisoning)}
@@ -303,20 +303,20 @@ class EnhancedServer(Server):
         # Save parameters of each client as time series
         ordered_results = [0 for _ in range(len(results))]
         for idx, (proxy, fitres) in enumerate(results):
-            # params = flatten_params(parameters_to_ndarrays(fitres.parameters))
-            # if self.sampling > 0:
-            #     # if the sampling number is greater than the number of
-            #     # parameters, just sample all of them
-            #     self.sampling = min(self.sampling, len(params))
-            #     if len(self.params_indexes) == 0:
-            #         # Sample a random subset of parameters
-            #         self.params_indexes = np.random.randint(
-            #             0, len(params), size=self.sampling
-            #         )
+            params = flatten_params(parameters_to_ndarrays(fitres.parameters))
+            if self.sampling > 0:
+                # if the sampling number is greater than the number of
+                # parameters, just sample all of them
+                self.sampling = min(self.sampling, len(params))
+                if len(self.params_indexes) == 0:
+                    # Sample a random subset of parameters
+                    self.params_indexes = np.random.randint(
+                        0, len(params), size=self.sampling
+                    )
 
-            #     params = params[self.params_indexes]
+                params = params[self.params_indexes]
 
-            # save_params(params, fitres.metrics["partition_id"], params_dir=self.history_dir)
+            save_params(params, fitres.metrics["partition_id"], params_dir=self.history_dir)
 
             # Re-arrange results in the same order as clients' cids impose
             # ordered_results[int(fitres.metrics["node_id"])] = (proxy, fitres)
@@ -361,25 +361,26 @@ class EnhancedServer(Server):
             # Update saved parameters time series after the attack
             for proxy, fitres in results:
                 if self.clients_state[fitres.metrics["partition_id"]]:
-                    # if self.sampling > 0:
-                    #     params = flatten_params(
-                    #         parameters_to_ndarrays(fitres.parameters)
-                    #     )[self.params_indexes]
-                    # else:
-                    #     params = flatten_params(
-                    #         parameters_to_ndarrays(fitres.parameters)
-                    #     )
+                    if self.sampling > 0:
+                        params = flatten_params(
+                            parameters_to_ndarrays(fitres.parameters)
+                        )[self.params_indexes]
+                    else:
+                        params = flatten_params(
+                            parameters_to_ndarrays(fitres.parameters)
+                        )
                     log(
                         INFO,
-                        "Saving parameters of client %s after the attack",
-                        fitres.metrics["partition_id"]
+                        "Saving parameters of client %s with shape %s after the attack",
+                        fitres.metrics["partition_id"],
+                        params.shape,
                     )
-                    # save_params(
-                    #     params,
-                    #     fitres.metrics["partition_id"],
-                    #     params_dir=self.history_dir,
-                    #     remove_last=True,
-                    # )
+                    save_params(
+                        params,
+                        fitres.metrics["partition_id"],
+                        params_dir=self.history_dir,
+                        remove_last=True,
+                    )
         else:
             results = ordered_results
             others = {}
