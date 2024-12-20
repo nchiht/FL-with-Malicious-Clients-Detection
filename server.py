@@ -316,7 +316,7 @@ class EnhancedServer(Server):
 
                 params = params[self.params_indexes]
 
-            save_params(params, fitres.metrics["partition_id"], params_dir=self.history_dir)
+            # save_params(params, fitres.metrics["partition_id"], params_dir=self.history_dir)
 
             # Re-arrange results in the same order as clients' cids impose
             # ordered_results[int(fitres.metrics["node_id"])] = (proxy, fitres)
@@ -375,12 +375,12 @@ class EnhancedServer(Server):
                         fitres.metrics["partition_id"],
                         params.shape,
                     )
-                    save_params(
-                        params,
-                        fitres.metrics["partition_id"],
-                        params_dir=self.history_dir,
-                        remove_last=True,
-                    )
+                    # save_params(
+                    #     params,
+                    #     fitres.metrics["partition_id"],
+                    #     params_dir=self.history_dir,
+                    #     remove_last=True,
+                    # )
         else:
             results = ordered_results
             others = {}
