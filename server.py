@@ -381,6 +381,12 @@ class EnhancedServer(Server):
                     #     params_dir=self.history_dir,
                     #     remove_last=True,
                     # )
+                    # save_params(
+                    #     params,
+                    #     fitres.metrics["partition_id"],
+                    #     params_dir=self.history_dir,
+                    #     remove_last=True,
+                    # )
         else:
             results = ordered_results
             others = {}
