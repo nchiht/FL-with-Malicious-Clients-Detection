@@ -14,7 +14,7 @@ from server import EnhancedServer
 from clients import FlowerClient
 from clients import get_parameters, set_parameters, test
 from utils import evaluation
-from utils.models import cifar10, mnist
+from utils.models import cifar10, mnist, CIC
 from attacks import no_attack, gaussian_attack 
 from strategy import EnhancedStrategy, CustomStrategy_FedAvg
 
@@ -41,7 +41,7 @@ def evaluate_fn(
     set_parameters(model, parameters)
     model.to(device)
 
-    _,_, testset = model_with_dataset[dataset_id][1](partition_id=random.randint(1, 2), NUM_CLIENTS=NUM_CLIENTS, BATCH_SIZE=BATCH_SIZE)
+    _,_, testset = model_with_dataset[dataset_id][1](partition_id=random.randint(0, 5), NUM_CLIENTS=NUM_CLIENTS, BATCH_SIZE=BATCH_SIZE)
     print("Testset (testloader): ", len(testset.dataset))
     # testloader = DataLoader(testset, batch_size=BATCH_SIZE)
     loss, accuracy = test(model, testset, device=device)
@@ -169,7 +169,8 @@ if __name__ == '__main__':
 
     model_with_dataset = {
         "cifar10": [cifar10.cifar10_Net(), cifar10.load_datasets],
-        "mnist": [mnist.mnist_Net(), mnist.load_datasets]
+        "mnist": [mnist.mnist_Net(), mnist.load_datasets],
+        "cic": [CIC.CIC_Net(), CIC.load_datasets]
         # TODO: add mnist
     }
 
@@ -197,20 +198,15 @@ if __name__ == '__main__':
     if strategy_type == "our" or strategy_type == "krum":
         strategy = EnhancedStrategy(
             fraction_fit = 1,
-            fraction_evaluate = 1,
-            min_fit_clients = 4,
-            min_evaluate_clients = 4,
-            min_available_clients = 4,
-            num_malicious_clients = 1,
+            fraction_evaluate = 0.5,
+            min_fit_clients = 10,
+            min_evaluate_clients = 5,
+            min_available_clients = 10,
+            num_malicious_clients = 10,
             num_clients_to_keep = num_client_to_keep,
             evaluate_fn = evaluate_fn,
             initial_parameters = ndarrays_to_parameters(get_parameters(model_with_dataset[dataset_id][0]))
-            # fraction_fit = 1,
-            # fraction_evaluate = 0.5,
-            # min_fit_clients = 10,
-            # min_evaluate_clients = 5,
-            # min_available_clients = 10,
-            # num_malicious_clients = 10,
+
         )
     elif strategy_type == "fedavg":
         strategy = CustomStrategy_FedAvg(
@@ -220,7 +216,7 @@ if __name__ == '__main__':
             min_evaluate_clients = 5,
             min_available_clients = 10,
             evaluate_fn = evaluate_fn,
-            initial_parameters = ndarrays_to_parameters(get_parameters(model_with_dataset[dataset_id][0]))
+            initial_parameters = ndarrays_to_parameters(get_parameters(model_with_dataset[dataset_id][0]))          
         )
 
 

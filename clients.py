@@ -34,13 +34,14 @@ def train(net, trainloader, epochs: int, verbose=False, device="cpu", learning_r
     optimizer = torch.optim.Adam(net.parameters(), lr=learning_rate)
     net.train()
     local_grad = []
+    print("Start training")
     for epoch in range(epochs):
         correct, total, epoch_loss = 0, 0, 0.0
         for batch in trainloader:
 
             if(net._get_name() == "cifar10_Net"): # TODO: depends on models
                 images, labels = batch["img"].to(device), batch["label"].to(device)
-            if(net._get_name() == "mnist_Net"):
+            if((net._get_name() == "mnist_Net") or (net._get_name() == "CIC_Net")):
                 images, labels = batch["image"].to(device), batch["label"].to(device)
             optimizer.zero_grad()
             outputs = net(images)
@@ -65,6 +66,7 @@ def train(net, trainloader, epochs: int, verbose=False, device="cpu", learning_r
         if verbose:
             print(f"Epoch {epoch+1}: train loss {epoch_loss}, accuracy {epoch_acc}")
     # log(INFO, "Local Grad: %s", local_grad)
+    print("Finish training")
     return local_grad
 
 def test(net, testloader, device="cpu"):
@@ -77,7 +79,7 @@ def test(net, testloader, device="cpu"):
 
             if(net._get_name() == "cifar10_Net"): # TODO: depends on models
                 images, labels = batch["img"].to(device), batch["label"].to(device)
-            if(net._get_name() == "mnist_Net"):
+            if((net._get_name() == "mnist_Net") or (net._get_name() == "CIC_Net")):
                 images, labels = batch["image"].to(device), batch["label"].to(device)
 
             outputs = net(images)
@@ -130,7 +132,7 @@ def poison_data(train_loader, poison_ratio=0, net=cifar10.cifar10_Net()):
         # Tạo datasets.Dataset
         poisoned_dataset = Dataset.from_dict({"img": poisoned_data["img"], "label": poisoned_data["label"]})
         return poisoned_dataset
-    if(net._get_name() == "mnist_Net"):
+    if((net._get_name() == "mnist_Net") or (net._get_name() == "CIC_Net")):
         poisoned_data = {"image": [], "label": []}
         for batch in train_loader:
             inputs, labels = batch["image"], batch["label"]
@@ -187,7 +189,7 @@ def poison_data_utg(train_loader, poison_ratio=0, net=cifar10.cifar10_Net()):
         # Tạo datasets.Dataset
         poisoned_dataset = Dataset.from_dict({"img": poisoned_data["img"], "label": poisoned_data["label"]})
         return poisoned_dataset
-    if(net._get_name() == "mnist_Net"):
+    if((net._get_name() == "mnist_Net") or (net._get_name() == "CIC_Net")):
         poisoned_data = {"image": [], "label": []}
         for batch in train_loader:
             inputs, labels = batch["image"], batch["label"]
@@ -219,7 +221,7 @@ def collate_fn(batch):
     labels = torch.tensor([item["label"] for item in batch])
     return {"img": images, "label": labels}
 
-def collate_fn_mnist(batch):
+def collate_fn_mnist_CIC(batch):
     """
     Chuẩn hóa batch để tạo Tensor từ dữ liệu.
     """
@@ -273,8 +275,8 @@ class FlowerClient(NumPyClient):
             # Tạo lại DataLoader với dữ liệu đã bị nhiễm độc
             if(self.net._get_name() == "cifar10_Net"): # TODO: depends on models
                 trainloader = DataLoader(poisoned_data, batch_size=BATCH_SIZE, collate_fn=collate_fn)#shuffle=True, 
-            if(self.net._get_name() == "mnist_Net"):
-                trainloader = DataLoader(poisoned_data, batch_size=BATCH_SIZE, collate_fn=collate_fn_mnist)#shuffle=True, 
+            if((self.net._get_name() == "mnist_Net") or (self.net._get_name() == "CIC_Net")):
+                trainloader = DataLoader(poisoned_data, batch_size=BATCH_SIZE, collate_fn=collate_fn_mnist_CIC)#shuffle=True, 
             log(INFO, "Client %s: Poisoned data", self.partition_id) 
         else:
             trainloader = self.trainloader

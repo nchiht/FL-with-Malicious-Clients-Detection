@@ -22,4 +22,3 @@ study case 1:
 
 `python main.py -wr 5 -nm 10 -nd 5 -r 50 -n 50`
 
-python main.py -d mnist -r 2 -n 4 -nm 1 -nd 0 --num_client_to_keep 2
