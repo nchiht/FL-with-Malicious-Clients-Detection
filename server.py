@@ -371,7 +371,7 @@ class EnhancedServer(Server):
                     #     )
                     log(
                         INFO,
-                        "Saving parameters of client %s with shape %s after the attack",
+                        "Saving parameters of client %s after the attack",
                         fitres.metrics["partition_id"]
                         # params.shape,
                     )
