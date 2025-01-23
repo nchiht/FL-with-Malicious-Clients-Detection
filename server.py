@@ -371,7 +371,7 @@ class EnhancedServer(Server):
                     #     )
                     log(
                         INFO,
-                        "Saving parameters of client %s with shape %s after the attack",
+                        "Saving parameters of client %s after the attack",
                         fitres.metrics["partition_id"]
                         # params.shape,
                     )
@@ -427,6 +427,7 @@ class EnhancedServer(Server):
                                                     self.clients_state,
                                                     self.flags_data_poisoning,
                                                     steps=select_k - 1
+                                                    # steps=1
                                                 )
 
                     metrics_detection["server_round"] = server_round

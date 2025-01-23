@@ -4,7 +4,7 @@ import matplotlib.pyplot as plt
 import ast
 
 # Đọc dữ liệu từ file CSV
-data = pd.read_csv("data\metrics\detection_metrics.csv")
+data = pd.read_csv("data\metrics\\run_2024-12-24_03-02-02\detection_metrics.csv")
 
 # Tính trung bình các độ đo
 average_accuracy = data['accuracy'].mean()
@@ -21,7 +21,7 @@ averages = pd.DataFrame({
     'Average': [average_accuracy, average_recall, average_precision, average_f1_score]
 })
 
-averages.to_csv("data\plots\Average_metrics.csv", index=False)
+# averages.to_csv("data\plots\Average_metrics.csv", index=False)
 
 # Lấy confusion matrix từ file CSV
 # Chuyển đổi chuỗi thành mảng numpy
@@ -56,5 +56,5 @@ ax.set_yticklabels(['', 'Malicious', 'Benign'])
 plt.xlabel('Predicted')
 plt.ylabel('True')
 # Lưu kết quả ra file
-plt.savefig("data\plots\confusion_matrix_detection_plot.png")
+# plt.savefig("data\plots\confusion_matrix_detection_plot.png")
 plt.show()

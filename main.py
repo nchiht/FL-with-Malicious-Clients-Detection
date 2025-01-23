@@ -92,9 +92,9 @@ def client_fn(context: Context) -> Client:
     # Create a single Flower client representing a single organization
     # FlowerClient is a subclass of NumPyClient, so we need to call .to_client()
     # to convert it to a subclass of `flwr.client.Client`
-    print("PartitionID: ", partition_id)
-    print("Trainloader: ", len(trainloader.dataset))
-    print("Valloader: ", len(valloader.dataset))
+    # print("PartitionID: ", partition_id)
+    # print("Trainloader: ", len(trainloader.dataset))
+    # print("Valloader: ", len(valloader.dataset))
     return FlowerClient(
         partition_id, 
         node_id, net, trainloader, valloader, 
@@ -149,7 +149,6 @@ if __name__ == '__main__':
     target = run_config["target"]
     defense = run_config["defense"]
     device = torch.device(run_config["device"])
-
     # Specify the resources each of your clients need
     # By default, each client will be allocated 1x CPU and 0x GPUs
     backend_config = {"client_resources": {"num_cpus": 1, "num_gpus": 0.0}}
@@ -202,7 +201,7 @@ if __name__ == '__main__':
             min_fit_clients = 10,
             min_evaluate_clients = 5,
             min_available_clients = 10,
-            num_malicious_clients = 10,
+            num_malicious_clients = 5,
             num_clients_to_keep = num_client_to_keep,
             evaluate_fn = evaluate_fn,
             initial_parameters = ndarrays_to_parameters(get_parameters(model_with_dataset[dataset_id][0]))

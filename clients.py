@@ -34,7 +34,7 @@ def train(net, trainloader, epochs: int, verbose=False, device="cpu", learning_r
     optimizer = torch.optim.Adam(net.parameters(), lr=learning_rate)
     net.train()
     local_grad = []
-    print("Start training")
+    # print("Start training")
     for epoch in range(epochs):
         correct, total, epoch_loss = 0, 0, 0.0
         for batch in trainloader:
@@ -66,7 +66,7 @@ def train(net, trainloader, epochs: int, verbose=False, device="cpu", learning_r
         if verbose:
             print(f"Epoch {epoch+1}: train loss {epoch_loss}, accuracy {epoch_acc}")
     # log(INFO, "Local Grad: %s", local_grad)
-    print("Finish training")
+    # print("Finish training")
     return local_grad
 
 def test(net, testloader, device="cpu"):
@@ -164,13 +164,33 @@ def poison_data_utg(train_loader, poison_ratio=0, net=cifar10.cifar10_Net()):
     Returns:
         poisoned_dataset: Một đối tượng datasets.Dataset chứa dữ liệu đã bị thay đổi nhãn.
     """
-    
+    if(net._get_name() == "CIC_Net"):
+        poisoned_data = {"image": [], "label": []}
+        for batch in train_loader:
+            inputs, labels = batch["image"], batch["label"]
+
+            for i in range(len(labels)):
+                if torch.rand(1).item() < poison_ratio:
+                    labels[i] = np.random.randint(0, 5)
+                    # labels[i] = (labels[i] + 1) % 10
+
+            # Chuyển từng phần tử của inputs thành torch.Tensor nếu chưa phải
+            inputs = [torch.tensor(img) if not isinstance(img, torch.Tensor) else img for img in inputs]
+
+            poisoned_data["image"].extend(inputs)
+            poisoned_data["label"].extend(labels)
+        
+        # Chuyển đổi dữ liệu thành torch.Tensor
+        poisoned_data["image"] = [torch.tensor(img) if isinstance(img, list) else img for img in poisoned_data["image"]]
+        poisoned_data["label"] = torch.tensor(poisoned_data["label"])
+        
+        # Tạo datasets.Dataset
+        poisoned_dataset = Dataset.from_dict({"image": poisoned_data["image"], "label": poisoned_data["label"]})
+        return poisoned_dataset
     if(net._get_name() == "cifar10_Net"): # TODO: depends on models
         poisoned_data = {"img": [], "label": []}
         for batch in train_loader:
             inputs, labels = batch["img"], batch["label"]
-
-
             for i in range(len(labels)):
                 if torch.rand(1).item() < poison_ratio:
                     labels[i] = np.random.randint(0, 10)
@@ -189,7 +209,7 @@ def poison_data_utg(train_loader, poison_ratio=0, net=cifar10.cifar10_Net()):
         # Tạo datasets.Dataset
         poisoned_dataset = Dataset.from_dict({"img": poisoned_data["img"], "label": poisoned_data["label"]})
         return poisoned_dataset
-    if((net._get_name() == "mnist_Net") or (net._get_name() == "CIC_Net")):
+    if(net._get_name() == "mnist_Net"):
         poisoned_data = {"image": [], "label": []}
         for batch in train_loader:
             inputs, labels = batch["image"], batch["label"]
@@ -256,7 +276,7 @@ class FlowerClient(NumPyClient):
         return get_parameters(self.net)
 
     def fit(self, parameters, config):
-        print("Client: ", self.partition_id)
+        # print("Client: ", self.partition_id)
         set_parameters(self.net, parameters)
         self.partition_id = config["index"]
         # log(INFO, "dp flag client %s: %s", self.partition_id, config["dp_flags"])
@@ -283,7 +303,7 @@ class FlowerClient(NumPyClient):
 
         # print("learning_rate", config["learning_rate"])
         train(self.net, trainloader, epochs=self.epochs, device=self.device, learning_rate=config["learning_rate"])
-        print("Finish fit ", self.partition_id)
+        # print("Finish fit ", self.partition_id)
         return get_parameters(self.net), len(self.trainloader), {"node_id": self.node_id, "partition_id": self.partition_id}
 
     def evaluate(self, parameters, config):
