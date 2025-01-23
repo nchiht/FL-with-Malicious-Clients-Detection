@@ -29,7 +29,7 @@ class mnist_Net(nn.Module):
     
 # def load_datasets(partition_id: int):
 def load_datasets(partition_id: int, NUM_CLIENTS: int, BATCH_SIZE: int):
-    fds = FederatedDataset(dataset="builetrongduc/CICMalDroid", partitioners={"train": NUM_CLIENTS})
+    fds = FederatedDataset(dataset="mnist", partitioners={"train": NUM_CLIENTS})
 
     for _ in range(2):  # Try twice
         try:
